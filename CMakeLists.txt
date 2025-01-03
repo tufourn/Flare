@@ -1,6 +1,91 @@
 cmake_minimum_required(VERSION 3.28)
-project(vkr2)
+project(Flare)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(vkr2 main.cpp)
+include(FetchContent)
+set(FETCHCONTENT_QUIET FALSE)
+
+FetchContent_Declare(
+        volk
+        GIT_REPOSITORY https://github.com/zeux/volk.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(volk)
+
+FetchContent_Declare(
+        glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(glfw)
+
+FetchContent_Declare(
+        imgui
+        GIT_REPOSITORY https://github.com/ocornut/imgui.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(imgui)
+add_library(imgui STATIC
+        ${imgui_SOURCE_DIR}/imgui.cpp
+        ${imgui_SOURCE_DIR}/imgui_draw.cpp
+        ${imgui_SOURCE_DIR}/imgui_demo.cpp
+        ${imgui_SOURCE_DIR}/imgui_tables.cpp
+        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+        ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+)
+target_link_libraries(imgui volk)
+target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${glfw_SOURCE_DIR}/include)
+target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES IMGUI_IMPL_VULKAN_USE_VOLK)
+
+FetchContent_Declare(
+        tracy
+        GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable(tracy)
+
+FetchContent_Declare(
+        vma
+        GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(vma)
+
+FetchContent_Declare(
+        glm
+        GIT_REPOSITORY https://github.com/g-truc/glm.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(glm)
+
+FetchContent_Declare(
+        stb
+        GIT_REPOSITORY https://github.com/nothings/stb.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(stb)
+
+add_library(FlareExternal INTERFACE)
+target_link_libraries(FlareExternal INTERFACE
+        volk
+        glfw
+        imgui
+        TracyClient
+        glm
+)
+target_include_directories(FlareExternal INTERFACE
+        ${vma_SOURCE_DIR}/include
+        ${stb_SOURCE_DIR}
+)
+
+add_subdirectory(src/01-triangle)
