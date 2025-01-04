@@ -75,6 +75,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(stb)
 
+FetchContent_Declare(
+        spdlog
+        GIT_REPOSITORY https://github.com/gabime/spdlog.git
+        GIT_TAG v1.x
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(spdlog)
+
 add_library(FlareExternal INTERFACE)
 target_link_libraries(FlareExternal INTERFACE
         volk
@@ -82,10 +90,21 @@ target_link_libraries(FlareExternal INTERFACE
         imgui
         TracyClient
         glm
+        spdlog
 )
 target_include_directories(FlareExternal INTERFACE
         ${vma_SOURCE_DIR}/include
         ${stb_SOURCE_DIR}
+)
+
+add_library(FlareApp
+        src/Flare/FlareApp/Window.cpp
+        src/Flare/FlareApp/Window.h
+        src/Flare/FlareApp/Application.cpp
+        src/Flare/FlareApp/Application.h
+)
+target_link_libraries(FlareApp PRIVATE
+        FlareExternal
 )
 
 add_subdirectory(src/01-triangle)
