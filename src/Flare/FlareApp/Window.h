@@ -1,7 +1,9 @@
 #pragma once
 
 #define GLFW_INCLUDE_NONE
-#include "GLFW/glfw3.h"
+#define VK_NO_PROTOTYPES
+#include <volk.h>
+#include <GLFW/glfw3.h>
 
 namespace Flare{
     struct WindowConfig {
@@ -18,9 +20,9 @@ namespace Flare{
         void init(const WindowConfig& config);
         void shutdown();
         void pollEvents() const { glfwPollEvents(); }
-        bool shouldClose() const { return glfwWindowShouldClose(window); }
+        bool shouldClose() const { return glfwWindowShouldClose(glfwWindow); }
 
-        GLFWwindow* window = nullptr;
+        GLFWwindow* glfwWindow = nullptr;
         uint32_t width = 0;
         uint32_t height = 0;
     };

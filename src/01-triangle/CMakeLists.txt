@@ -11,4 +11,5 @@ target_include_directories(triangle PRIVATE
 target_link_libraries(triangle PRIVATE
         FlareExternal
         FlareApp
+        FlareGraphics
 )

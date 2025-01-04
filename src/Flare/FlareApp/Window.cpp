@@ -1,5 +1,5 @@
 #include "Window.h"
-#include "spdlog/spdlog.h"
+#include <spdlog/spdlog.h>
 
 namespace Flare {
     void Window::init(const WindowConfig& config) {
@@ -9,15 +9,22 @@ namespace Flare {
             spdlog::error("Window: GLFW failed to initialize");
         }
 
+        if (!glfwVulkanSupported()) {
+            spdlog::error("Window: GLFW Vulkan not supported");
+        }
+
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window = glfwCreateWindow(config.width, config.height, config.name, nullptr, nullptr);
-        if (!window) {
+        glfwWindow = glfwCreateWindow(config.width, config.height, config.name, nullptr, nullptr);
+        if (!glfwWindow) {
             spdlog::error("Window: GLFW failed to create window");
         }
+
+        width = config.width;
+        height = config.height;
     }
 
     void Window::shutdown() {
-        glfwDestroyWindow(window);
+        glfwDestroyWindow(glfwWindow);
         glfwTerminate();
         spdlog::info("Window: Shutdown");
     }

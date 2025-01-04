@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 project(Flare)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
@@ -105,6 +105,18 @@ add_library(FlareApp
 )
 target_link_libraries(FlareApp PRIVATE
         FlareExternal
+)
+
+add_library(FlareGraphics
+        src/Flare/FlareGraphics/GpuDevice.cpp
+        src/Flare/FlareGraphics/GpuDevice.h
+)
+target_link_libraries(FlareGraphics PRIVATE
+        FlareExternal
+)
+option(ENABLE_VULKAN_VALIDATION "Enable Vulkan Validation Layers" OFF)
+target_compile_definitions(FlareGraphics PRIVATE
+        $<$<BOOL:${ENABLE_VULKAN_VALIDATION}>:ENABLE_VULKAN_VALIDATION>
 )
 
 add_subdirectory(src/01-triangle)
