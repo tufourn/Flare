@@ -5,6 +5,7 @@
 #include <volk.h>
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
+#include <optional>
 
 namespace Flare {
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -59,13 +60,13 @@ namespace Flare {
         const char **glfwExtensions;
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionsCount);
 
-        std::vector<const char *> enabledExtensions(glfwExtensions, glfwExtensions + glfwExtensionsCount);
+        std::vector<const char *> enabledInstanceExtensions(glfwExtensions, glfwExtensions + glfwExtensionsCount);
         std::vector<const char *> enabledLayers;
 
 #ifdef ENABLE_VULKAN_VALIDATION
         spdlog::info("GpuDevice: Using vulkan validation layer");
 
-        enabledExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        enabledInstanceExtensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         enabledLayers.emplace_back("VK_LAYER_KHRONOS_validation");
 
         uint32_t layerCount;
@@ -110,8 +111,8 @@ namespace Flare {
                 .pApplicationInfo = &appInfo,
                 .enabledLayerCount = static_cast<uint32_t>(enabledLayers.size()),
                 .ppEnabledLayerNames = enabledLayers.empty() ? nullptr : enabledLayers.data(),
-                .enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size()),
-                .ppEnabledExtensionNames = enabledExtensions.data(),
+                .enabledExtensionCount = static_cast<uint32_t>(enabledInstanceExtensions.size()),
+                .ppEnabledExtensionNames = enabledInstanceExtensions.data(),
         };
 
         if (vkCreateInstance(&instanceCI, nullptr, &instance) != VK_SUCCESS) {
@@ -126,10 +127,205 @@ namespace Flare {
         }
 #endif
 
-        // Physical device todo
+        // Physical device
+        uint32_t gpuCount = 0;
+        if (vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr) != VK_SUCCESS) {
+            spdlog::error("GpuDevice: Failed to enumerate physical devices");
+        }
+        if (gpuCount == 0) {
+            spdlog::error("GpuDevice: No physical device with Vulkan support");
+        }
+        std::vector<VkPhysicalDevice> physicalDevices(gpuCount);
+        if (vkEnumeratePhysicalDevices(instance, &gpuCount, physicalDevices.data()) != VK_SUCCESS) {
+            spdlog::error("GpuDevice: Failed to enumerate physical devices");
+        }
+
+        VkPhysicalDevice discreteGpu = VK_NULL_HANDLE;
+        VkPhysicalDevice integratedGpu = VK_NULL_HANDLE;
+        for (size_t i = 0; i < gpuCount; i++) {
+            VkPhysicalDeviceProperties gpuProperties;
+            vkGetPhysicalDeviceProperties(physicalDevices[i], &gpuProperties);
+            if (gpuProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+                discreteGpu = physicalDevices[i];
+                continue;
+            }
+            if (gpuProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
+                integratedGpu = physicalDevices[i];
+                continue;
+            }
+        }
+
+        if (discreteGpu != VK_NULL_HANDLE) {
+            physicalDevice = discreteGpu;
+        } else if (integratedGpu != VK_NULL_HANDLE) {
+            physicalDevice = integratedGpu;
+        } else {
+            spdlog::error("GpuDevice: Failed to find a suitable gpu");
+        }
+
+        vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+        vkGetPhysicalDeviceFeatures(physicalDevice, &physicalDeviceFeatures);
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &physicalDeviceMemoryProperties);
+        spdlog::info("GpuDevice: Using {}", physicalDeviceProperties.deviceName);
+
+        // queues, separate family for each queue, todo: same family for queues in case can't find separate family
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
+
+        std::optional<uint32_t> mainFamilyOpt;
+        std::optional<uint32_t> computeFamilyOpt;
+        std::optional<uint32_t> transferFamilyOpt;
+
+        for (uint32_t fi = 0; fi < queueFamilyCount; fi++) {
+            VkQueueFamilyProperties family = queueFamilies[fi];
+
+            if (family.queueCount == 0) {
+                continue;
+            }
+
+            if (!mainFamilyOpt.has_value() &&
+                    (family.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) ==
+                    (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
+                mainFamilyOpt = fi;
+                continue;
+            }
+
+            if (!computeFamilyOpt.has_value() &&
+                family.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+                computeFamilyOpt = fi;
+                continue;
+            }
+
+            if (!transferFamilyOpt.has_value() &&
+                ((family.queueFlags & VK_QUEUE_COMPUTE_BIT) == 0) && family.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+                transferFamilyOpt = fi;
+                continue;
+            }
+
+            if (mainFamilyOpt.has_value() && computeFamilyOpt.has_value() && transferFamilyOpt.has_value()) {
+                break;
+            }
+        }
+
+        if (!mainFamilyOpt.has_value()) {
+            spdlog::error("GpuDevice: Failed to find main queue family");
+        }
+        if (!computeFamilyOpt.has_value()) {
+            spdlog::error("GpuDevice: Failed to find compute queue family");
+        }
+        if (!transferFamilyOpt.has_value()) {
+            spdlog::error("GpuDevice: Failed to find transfer queue family");
+        }
+
+        mainFamily = mainFamilyOpt.value();
+        computeFamily = computeFamilyOpt.value();
+        transferFamily = transferFamilyOpt.value();
+
+        float queuePriority = 1.f;
+
+        VkDeviceQueueCreateInfo mainQueueCI {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .queueFamilyIndex = mainFamily,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority,
+        };
+
+        VkDeviceQueueCreateInfo computeQueueCI {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .queueFamilyIndex = computeFamily,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority,
+        };
+
+        VkDeviceQueueCreateInfo transferQueueCI {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .queueFamilyIndex = transferFamily,
+                .queueCount = 1,
+                .pQueuePriorities = &queuePriority,
+        };
+
+        std::vector<VkDeviceQueueCreateInfo> queueCI = {mainQueueCI, computeQueueCI, transferQueueCI};
+
+        // device extensions
+        uint32_t deviceExtensionCount = 0;
+        vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &deviceExtensionCount, nullptr);
+        std::vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
+        vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &deviceExtensionCount, deviceExtensions.data());
+
+        std::vector<const char*> enabledDeviceExtensions;
+
+        bool swapchainExtensionPresent = false;
+
+        for (size_t i = 0; i < deviceExtensionCount; i++) {
+            if (strcmp(deviceExtensions[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) {
+                swapchainExtensionPresent = true;
+            }
+        }
+
+        if (!swapchainExtensionPresent) {
+            spdlog::error("GpuDevice: Swapchain extension not present");
+        }
+
+        enabledDeviceExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
+        // device features
+        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+            .pNext = nullptr
+        };
+
+        VkPhysicalDeviceSynchronization2Features synchronization2Features {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+            .pNext = &dynamicRenderingFeatures,
+        };
+
+        VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+            .pNext = &synchronization2Features,
+        };
+
+        VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+            .pNext = &bufferDeviceAddressFeatures,
+        };
+
+        VkPhysicalDeviceFeatures2 features {
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                .pNext = &descriptorIndexingFeatures,
+        };
+
+        vkGetPhysicalDeviceFeatures2(physicalDevice, &features);
+
+        // logical device creation
+        VkDeviceCreateInfo deviceCI {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+                .pNext = &features,
+                .flags = 0,
+                .queueCreateInfoCount = static_cast<uint32_t>(queueCI.size()),
+                .pQueueCreateInfos = queueCI.data(),
+                .enabledExtensionCount = static_cast<uint32_t>(enabledDeviceExtensions.size()),
+                .ppEnabledExtensionNames = enabledDeviceExtensions.data(),
+        };
+
+        if (vkCreateDevice(physicalDevice, &deviceCI, nullptr, &device) != VK_SUCCESS) {
+            spdlog::error("GpuDevice: Failed to create logical device");
+        }
+
+        vkGetDeviceQueue(device, mainFamily, 0, &mainQueue);
+        vkGetDeviceQueue(device, computeFamily, 0, &computeQueue);
+        vkGetDeviceQueue(device, transferFamily, 0, &transferQueue);
     }
 
     void GpuDevice::shutdown() {
+        vkDestroyDevice(device, nullptr);
 #ifdef ENABLE_VULKAN_VALIDATION
         vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 #endif

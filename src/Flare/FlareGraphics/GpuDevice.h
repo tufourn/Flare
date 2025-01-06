@@ -17,8 +17,18 @@ namespace Flare {
         void init(GpuDeviceCreateInfo& gpuDeviceCI);
         void shutdown();
 
-        VkInstance instance = VK_NULL_HANDLE;
-        VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
-        VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+        VkInstance instance;
+        VkDebugUtilsMessengerEXT debugMessenger;
+        VkPhysicalDevice physicalDevice;
+        VkPhysicalDeviceProperties physicalDeviceProperties;
+        VkPhysicalDeviceFeatures physicalDeviceFeatures;
+        VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
+        VkDevice device;
+        VkQueue mainQueue;
+        VkQueue computeQueue;
+        VkQueue transferQueue;
+        uint32_t mainFamily;
+        uint32_t computeFamily;
+        uint32_t transferFamily;
     };
 }
