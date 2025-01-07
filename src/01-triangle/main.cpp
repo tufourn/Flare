@@ -13,8 +13,6 @@ struct TriangleApp : Flare::Application {
         window.init(windowConfig);
 
         Flare::GpuDeviceCreateInfo gpuDeviceCI {
-            .width = window.width,
-            .height = window.height,
             .glfwWindow = window.glfwWindow,
         };
 

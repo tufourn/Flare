@@ -3,13 +3,12 @@
 #include <volk.h>
 
 #include <cstdint>
+#include <vector>
 
 struct GLFWwindow;
 
 namespace Flare {
     struct GpuDeviceCreateInfo {
-        uint32_t width;
-        uint32_t height;
         GLFWwindow* glfwWindow;
     };
 
@@ -17,12 +16,29 @@ namespace Flare {
         void init(GpuDeviceCreateInfo& gpuDeviceCI);
         void shutdown();
 
+        void setSurfaceFormat(VkFormat format);
+        void setPresentMode(VkPresentModeKHR mode);
+        void setSwapchainExtent();
+        void createSwapchain();
+
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
+
+        GLFWwindow* glfwWindow;
+        VkSurfaceKHR surface;
+        VkSwapchainKHR swapchain;
+        VkSurfaceFormatKHR surfaceFormat;
+        VkPresentModeKHR presentMode;
+        VkExtent2D swapchainExtent;
+        VkSurfaceCapabilitiesKHR surfaceCapabilities;
+        std::vector<VkSurfaceFormatKHR> surfaceFormats;
+        std::vector<VkPresentModeKHR> presentModes;
+
         VkPhysicalDevice physicalDevice;
         VkPhysicalDeviceProperties physicalDeviceProperties;
         VkPhysicalDeviceFeatures physicalDeviceFeatures;
         VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
+
         VkDevice device;
         VkQueue mainQueue;
         VkQueue computeQueue;

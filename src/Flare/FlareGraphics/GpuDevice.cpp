@@ -2,10 +2,12 @@
 
 #define GLFW_INCLUDE_NONE
 #define VK_NO_PROTOTYPES
+
 #include <volk.h>
 #include <GLFW/glfw3.h>
 #include <spdlog/spdlog.h>
 #include <optional>
+#include <algorithm>
 
 namespace Flare {
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -40,6 +42,8 @@ namespace Flare {
 
     void GpuDevice::init(GpuDeviceCreateInfo &gpuDeviceCI) {
         spdlog::info("GpuDevice: Initialize");
+
+        glfwWindow = gpuDeviceCI.glfwWindow;
 
         // Instance
         if (volkInitialize() != VK_SUCCESS) {
@@ -86,7 +90,7 @@ namespace Flare {
             }
         }
 
-        VkDebugUtilsMessengerCreateInfoEXT debugMessengerCI {
+        VkDebugUtilsMessengerCreateInfoEXT debugMessengerCI{
                 .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
                 .pNext = nullptr,
                 .flags = 0,
@@ -186,8 +190,8 @@ namespace Flare {
             }
 
             if (!mainFamilyOpt.has_value() &&
-                    (family.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) ==
-                    (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
+                (family.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) ==
+                (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) {
                 mainFamilyOpt = fi;
                 continue;
             }
@@ -225,7 +229,7 @@ namespace Flare {
 
         float queuePriority = 1.f;
 
-        VkDeviceQueueCreateInfo mainQueueCI {
+        VkDeviceQueueCreateInfo mainQueueCI{
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
@@ -234,7 +238,7 @@ namespace Flare {
                 .pQueuePriorities = &queuePriority,
         };
 
-        VkDeviceQueueCreateInfo computeQueueCI {
+        VkDeviceQueueCreateInfo computeQueueCI{
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
@@ -243,7 +247,7 @@ namespace Flare {
                 .pQueuePriorities = &queuePriority,
         };
 
-        VkDeviceQueueCreateInfo transferQueueCI {
+        VkDeviceQueueCreateInfo transferQueueCI{
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
@@ -260,7 +264,7 @@ namespace Flare {
         std::vector<VkExtensionProperties> deviceExtensions(deviceExtensionCount);
         vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &deviceExtensionCount, deviceExtensions.data());
 
-        std::vector<const char*> enabledDeviceExtensions;
+        std::vector<const char *> enabledDeviceExtensions;
 
         bool swapchainExtensionPresent = false;
 
@@ -277,27 +281,27 @@ namespace Flare {
         enabledDeviceExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
         // device features
-        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
-            .pNext = nullptr
+        VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+                .pNext = nullptr
         };
 
-        VkPhysicalDeviceSynchronization2Features synchronization2Features {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
-            .pNext = &dynamicRenderingFeatures,
+        VkPhysicalDeviceSynchronization2Features synchronization2Features{
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES,
+                .pNext = &dynamicRenderingFeatures,
         };
 
-        VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
-            .pNext = &synchronization2Features,
+        VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures{
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES,
+                .pNext = &synchronization2Features,
         };
 
-        VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures {
-            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
-            .pNext = &bufferDeviceAddressFeatures,
+        VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES,
+                .pNext = &bufferDeviceAddressFeatures,
         };
 
-        VkPhysicalDeviceFeatures2 features {
+        VkPhysicalDeviceFeatures2 features{
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                 .pNext = &descriptorIndexingFeatures,
         };
@@ -305,7 +309,7 @@ namespace Flare {
         vkGetPhysicalDeviceFeatures2(physicalDevice, &features);
 
         // logical device creation
-        VkDeviceCreateInfo deviceCI {
+        VkDeviceCreateInfo deviceCI{
                 .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
                 .pNext = &features,
                 .flags = 0,
@@ -322,14 +326,141 @@ namespace Flare {
         vkGetDeviceQueue(device, mainFamily, 0, &mainQueue);
         vkGetDeviceQueue(device, computeFamily, 0, &computeQueue);
         vkGetDeviceQueue(device, transferFamily, 0, &transferQueue);
+
+        // surface and swapchain
+        if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
+            spdlog::error("GpuDevice: Failed to create window surface");
+        }
+
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+
+        uint32_t surfaceFormatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, nullptr);
+        if (surfaceFormatCount != 0) {
+            surfaceFormats.resize(surfaceFormatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &surfaceFormatCount, surfaceFormats.data());
+        }
+
+        uint32_t presentModeCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
+        if (presentModeCount != 0) {
+            presentModes.resize(presentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, presentModes.data());
+        }
+
+        if (surfaceFormats.empty() || presentModes.empty()) {
+            spdlog::error("GpuDevice: Swapchain not supported");
+        }
+
+        setSurfaceFormat(VK_FORMAT_B8G8R8A8_SRGB);
+        setPresentMode(VK_PRESENT_MODE_MAILBOX_KHR);
+        setSwapchainExtent();
+
+        createSwapchain();
     }
 
     void GpuDevice::shutdown() {
+        vkDestroySwapchainKHR(device, swapchain, nullptr);
         vkDestroyDevice(device, nullptr);
+        vkDestroySurfaceKHR(instance, surface, nullptr);
 #ifdef ENABLE_VULKAN_VALIDATION
         vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
 #endif
         vkDestroyInstance(instance, nullptr);
         spdlog::info("GpuDevice: Shutdown");
+    }
+
+    void GpuDevice::setSurfaceFormat(VkFormat format) {
+        bool supported = false;
+
+        for (const auto &availableFormat: surfaceFormats) {
+            if (availableFormat.format == format &&
+                availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+                surfaceFormat = availableFormat;
+                supported = true;
+            }
+        }
+
+        if (!supported) {
+            spdlog::error("GpuDevice: Surface format not supported");
+            surfaceFormat = surfaceFormats[0];
+        }
+    }
+
+    void GpuDevice::setPresentMode(VkPresentModeKHR mode) {
+        bool supported = false;
+        for (const auto &availableMode: presentModes) {
+            if (availableMode == mode) {
+                presentMode = availableMode;
+                supported = true;
+            }
+        }
+
+        if (!supported) {
+            spdlog::error("GpuDevice: Present mode not supported, using FIFO");
+            presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        }
+    }
+
+    void GpuDevice::setSwapchainExtent() {
+        if (!glfwWindow) {
+            spdlog::error("GpuDevice: Window not set, can't set swapchain extent");
+            return;
+        }
+
+        if (surfaceCapabilities.currentExtent.width != std::numeric_limits<uint32_t>::max() &&
+            surfaceCapabilities.currentExtent.height != std::numeric_limits<uint32_t>::max()) {
+            swapchainExtent = surfaceCapabilities.currentExtent;
+        } else {
+            int width, height;
+            glfwGetFramebufferSize(glfwWindow, &width, &height);
+
+            VkExtent2D actualExtent = {
+
+                    static_cast<uint32_t>(width),
+                    static_cast<uint32_t>(height)
+            };
+
+            actualExtent.width = std::clamp(actualExtent.width,
+                                            surfaceCapabilities.minImageExtent.width,
+                                            surfaceCapabilities.maxImageExtent.width);
+            actualExtent.height = std::clamp(actualExtent.height,
+                                             surfaceCapabilities.minImageExtent.height,
+                                             surfaceCapabilities.maxImageExtent.height);
+
+            swapchainExtent = actualExtent;
+        }
+    }
+
+    void GpuDevice::createSwapchain() {
+        uint32_t imageCount = surfaceCapabilities.minImageCount + 1;
+        if (surfaceCapabilities.maxImageCount > 0 && imageCount > surfaceCapabilities.maxImageCount) {
+            imageCount = surfaceCapabilities.maxImageCount;
+        }
+
+        VkSwapchainCreateInfoKHR swapchainCI {
+                .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+                .pNext = nullptr,
+                .flags = 0,
+                .surface = surface,
+                .minImageCount = imageCount,
+                .imageFormat = surfaceFormat.format,
+                .imageColorSpace = surfaceFormat.colorSpace,
+                .imageExtent = swapchainExtent,
+                .imageArrayLayers = 1,
+                .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                .queueFamilyIndexCount = 0,
+                .pQueueFamilyIndices = nullptr,
+                .preTransform = surfaceCapabilities.currentTransform,
+                .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                .presentMode = presentMode,
+                .clipped = VK_TRUE,
+                .oldSwapchain = VK_NULL_HANDLE,
+        };
+
+        if (vkCreateSwapchainKHR(device, &swapchainCI, nullptr, &swapchain) != VK_SUCCESS) {
+            spdlog::error("GpuDevice: Failed to create swapchain");
+        }
     }
 }
