@@ -29,7 +29,7 @@ FetchContent_Declare(
         GIT_PROGRESS true
 )
 FetchContent_MakeAvailable(imgui)
-add_library(imgui STATIC
+add_library(flare-imgui STATIC
         ${imgui_SOURCE_DIR}/imgui.cpp
         ${imgui_SOURCE_DIR}/imgui_draw.cpp
         ${imgui_SOURCE_DIR}/imgui_demo.cpp
@@ -38,9 +38,9 @@ add_library(imgui STATIC
         ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
-target_link_libraries(imgui volk)
-target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${glfw_SOURCE_DIR}/include)
-target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES IMGUI_IMPL_VULKAN_USE_VOLK)
+target_link_libraries(flare-imgui volk)
+target_include_directories(flare-imgui PUBLIC ${imgui_SOURCE_DIR} ${glfw_SOURCE_DIR}/include)
+target_compile_definitions(flare-imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES IMGUI_IMPL_VULKAN_USE_VOLK)
 
 FetchContent_Declare(
         tracy
@@ -83,18 +83,30 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
+FetchContent_Declare(
+        cgltf
+        GIT_REPOSITORY https://github.com/jkuhlmann/cgltf.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(cgltf)
+
+include(cmake/FetchSlang.cmake)
+
 add_library(FlareExternal INTERFACE)
 target_link_libraries(FlareExternal INTERFACE
         volk
         glfw
-        imgui
+        flare-imgui
         TracyClient
         glm
         spdlog
+        slang
 )
 target_include_directories(FlareExternal INTERFACE
         ${vma_SOURCE_DIR}/include
         ${stb_SOURCE_DIR}
+        ${cgltf_SOURCE_DIR}
 )
 
 add_library(FlareApp
@@ -110,6 +122,11 @@ target_link_libraries(FlareApp PRIVATE
 add_library(FlareGraphics
         src/Flare/FlareGraphics/GpuDevice.cpp
         src/Flare/FlareGraphics/GpuDevice.h
+        src/Flare/FlareGraphics/VmaUsage.cpp
+        src/Flare/FlareGraphics/GpuResources.cpp
+        src/Flare/FlareGraphics/GpuResources.h
+        src/Flare/FlareGraphics/ShaderCompiler.cpp
+        src/Flare/FlareGraphics/ShaderCompiler.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal
@@ -118,5 +135,7 @@ option(ENABLE_VULKAN_VALIDATION "Enable Vulkan Validation Layers" OFF)
 target_compile_definitions(FlareGraphics PRIVATE
         $<$<BOOL:${ENABLE_VULKAN_VALIDATION}>:ENABLE_VULKAN_VALIDATION>
 )
+
+include(cmake/CopyAssets.cmake)
 
 add_subdirectory(src/01-triangle)

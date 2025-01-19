@@ -43,7 +43,11 @@ namespace Flare {
     void GpuDevice::init(GpuDeviceCreateInfo &gpuDeviceCI) {
         spdlog::info("GpuDevice: Initialize");
 
+        // Set window
         glfwWindow = gpuDeviceCI.glfwWindow;
+
+        // Init resource pools;
+        pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
 
         // Instance
         if (volkInitialize() != VK_SUCCESS) {
@@ -323,9 +327,46 @@ namespace Flare {
             spdlog::error("GpuDevice: Failed to create logical device");
         }
 
+        volkLoadDevice(device);
+
         vkGetDeviceQueue(device, mainFamily, 0, &mainQueue);
         vkGetDeviceQueue(device, computeFamily, 0, &computeQueue);
         vkGetDeviceQueue(device, transferFamily, 0, &transferQueue);
+
+        // vma
+        VmaVulkanFunctions vmaFunctions{
+                .vkGetPhysicalDeviceProperties       = vkGetPhysicalDeviceProperties,
+                .vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties,
+                .vkAllocateMemory                    = vkAllocateMemory,
+                .vkFreeMemory                        = vkFreeMemory,
+                .vkMapMemory                         = vkMapMemory,
+                .vkUnmapMemory                       = vkUnmapMemory,
+                .vkFlushMappedMemoryRanges           = vkFlushMappedMemoryRanges,
+                .vkInvalidateMappedMemoryRanges      = vkInvalidateMappedMemoryRanges,
+                .vkBindBufferMemory                  = vkBindBufferMemory,
+                .vkBindImageMemory                   = vkBindImageMemory,
+                .vkGetBufferMemoryRequirements       = vkGetBufferMemoryRequirements,
+                .vkGetImageMemoryRequirements        = vkGetImageMemoryRequirements,
+                .vkCreateBuffer                      = vkCreateBuffer,
+                .vkDestroyBuffer                     = vkDestroyBuffer,
+                .vkCreateImage                       = vkCreateImage,
+                .vkDestroyImage                      = vkDestroyImage,
+                .vkCmdCopyBuffer                     = vkCmdCopyBuffer,
+        };
+
+        VmaAllocatorCreateInfo allocatorCI{
+                .flags = 0,
+                .physicalDevice = physicalDevice,
+                .device = device,
+                .pVulkanFunctions = &vmaFunctions,
+                .instance = instance,
+        };
+
+        if (vmaCreateAllocator(&allocatorCI, &allocator) != VK_SUCCESS) {
+            spdlog::error("GpuDevice: Failed to create VmaAllocator");
+        }
+
+        vmaCreateAllocator(&allocatorCI, &allocator);
 
         // surface and swapchain
         if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
@@ -355,12 +396,12 @@ namespace Flare {
         setSurfaceFormat(VK_FORMAT_B8G8R8A8_SRGB);
         setPresentMode(VK_PRESENT_MODE_MAILBOX_KHR);
         setSwapchainExtent();
-
         createSwapchain();
     }
 
     void GpuDevice::shutdown() {
-        vkDestroySwapchainKHR(device, swapchain, nullptr);
+        destroySwapchain();
+        vmaDestroyAllocator(allocator);
         vkDestroyDevice(device, nullptr);
         vkDestroySurfaceKHR(instance, surface, nullptr);
 #ifdef ENABLE_VULKAN_VALIDATION
@@ -438,7 +479,7 @@ namespace Flare {
             imageCount = surfaceCapabilities.maxImageCount;
         }
 
-        VkSwapchainCreateInfoKHR swapchainCI {
+        VkSwapchainCreateInfoKHR swapchainCI{
                 .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
                 .pNext = nullptr,
                 .flags = 0,
@@ -462,5 +503,57 @@ namespace Flare {
         if (vkCreateSwapchainKHR(device, &swapchainCI, nullptr, &swapchain) != VK_SUCCESS) {
             spdlog::error("GpuDevice: Failed to create swapchain");
         }
+
+        vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
+        swapchainImageViews.resize(imageCount);
+        std::vector<VkImage> swapchainImages(imageCount);
+        vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
+
+        for (size_t i = 0; i < imageCount; i++) {
+            VkImageViewCreateInfo imageViewCI {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .image = swapchainImages[i],
+                    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    .format = surfaceFormat.format,
+                    .components = {
+                            .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                            .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                    .subresourceRange = {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = 1,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                    }
+            };
+
+            if (vkCreateImageView(device, &imageViewCI, nullptr, &swapchainImageViews[i]) != VK_SUCCESS) {
+                spdlog::error("GpuDevice: Failed to create swapchain image view");
+            }
+        }
+    }
+
+    void GpuDevice::destroySwapchain() {
+        for (const auto& imageView : swapchainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        vkDestroySwapchainKHR(device, swapchain, nullptr);
+    }
+
+    Handle<Pipeline> GpuDevice::createPipeline(const PipelineCI &pipelineCI) {
+        Handle<Pipeline> handle = pipelines.obtain();
+        if (!handle.isValid()) {
+            return handle;
+        }
+
+        for (const auto& stage : pipelineCI.shaderStages.shaders) {
+        }
+
+        return handle;
     }
 }

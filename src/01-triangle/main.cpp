@@ -1,6 +1,7 @@
 #include "FlareApp/Application.h"
 #include "FlareApp/Window.h"
 #include "FlareGraphics/GpuDevice.h"
+#include "FlareGraphics/ShaderCompiler.h"
 
 struct TriangleApp : Flare::Application {
     void init(const Flare::ApplicationConfig& appConfig) override {
@@ -17,6 +18,8 @@ struct TriangleApp : Flare::Application {
         };
 
         gpu.init(gpuDeviceCI);
+        shaderCompiler.init();
+        shaderCompiler.compile("shaders/helloworld.slang");
     }
 
     void loop() override {
@@ -32,6 +35,7 @@ struct TriangleApp : Flare::Application {
 
     Flare::GpuDevice gpu;
     Flare::Window window;
+    Flare::ShaderCompiler shaderCompiler;
 };
 
 int main() {
