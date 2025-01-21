@@ -18,8 +18,13 @@ struct TriangleApp : Flare::Application {
         };
 
         gpu.init(gpuDeviceCI);
+
         shaderCompiler.init();
-        shaderCompiler.compile("shaders/helloworld.slang");
+
+        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/shaders.slang");
+
+        Flare::ReflectOutput reflection;
+        shaderCompiler.reflect(reflection, shader, Flare::ExecModel::eVertex | Flare::ExecModel::eFragment);
     }
 
     void loop() override {

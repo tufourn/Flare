@@ -91,6 +91,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(cgltf)
 
+FetchContent_Declare(
+        spirv-cross
+        GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Cross.git
+        GIT_TAG main
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(spirv-cross)
+
+add_library(flare-spirv-cross STATIC
+        ${spirv-cross_SOURCE_DIR}/spirv_reflect.cpp
+        ${spirv-cross_SOURCE_DIR}/spirv_cross.cpp
+        ${spirv-cross_SOURCE_DIR}/spirv_parser.cpp
+        ${spirv-cross_SOURCE_DIR}/spirv_cross_parsed_ir.cpp
+        ${spirv-cross_SOURCE_DIR}/spirv_cfg.cpp
+)
+
 include(cmake/FetchSlang.cmake)
 
 add_library(FlareExternal INTERFACE)
@@ -101,12 +117,14 @@ target_link_libraries(FlareExternal INTERFACE
         TracyClient
         glm
         spdlog
+        flare-spirv-cross
         slang
 )
 target_include_directories(FlareExternal INTERFACE
         ${vma_SOURCE_DIR}/include
         ${stb_SOURCE_DIR}
         ${cgltf_SOURCE_DIR}
+        ${spirv-cross_SOURCE_DIR}
 )
 
 add_library(FlareApp

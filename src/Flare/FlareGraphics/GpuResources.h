@@ -69,6 +69,25 @@ namespace Flare {
         VkShaderStageFlagBits type = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
     };
 
+    enum class ExecModel : uint32_t {
+        eNone = 0,
+        eVertex = 1,
+        eFragment = 2,
+        eCompute = 4,
+    };
+
+    inline ExecModel operator|(ExecModel lhs, ExecModel rhs) {
+        return static_cast<ExecModel>(
+                static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs)
+        );
+    }
+
+    inline ExecModel operator&(ExecModel lhs, ExecModel rhs) {
+        return static_cast<ExecModel>(
+                static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs)
+        );
+    }
+
     struct ShaderStageCI {
         std::vector<Shader> shaders;
 
@@ -134,6 +153,11 @@ namespace Flare {
         std::vector<ColorBlendAttachment> attachments;
 
         ColorBlendCI &addAttachment(ColorBlendAttachment attachment);
+    };
+
+    struct DescriptorSetLayoutCI {
+        std::vector<VkDescriptorSetLayoutBinding> bindings;
+        uint32_t index = 0;
     };
 
     struct PipelineCI {
