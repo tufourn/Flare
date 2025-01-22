@@ -8,6 +8,7 @@
 #include <spdlog/spdlog.h>
 #include <optional>
 #include <algorithm>
+#include <spirv_cross.hpp>
 
 namespace Flare {
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -48,6 +49,7 @@ namespace Flare {
 
         // Init resource pools;
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
+        descriptorSetLayouts.init(gpuDeviceCI.resourcePoolCI.descriptorSetLayouts);
 
         // Instance
         if (volkInitialize() != VK_SUCCESS) {
@@ -510,7 +512,7 @@ namespace Flare {
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
 
         for (size_t i = 0; i < imageCount; i++) {
-            VkImageViewCreateInfo imageViewCI {
+            VkImageViewCreateInfo imageViewCI{
                     .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                     .pNext = nullptr,
                     .flags = 0,
@@ -539,21 +541,350 @@ namespace Flare {
     }
 
     void GpuDevice::destroySwapchain() {
-        for (const auto& imageView : swapchainImageViews) {
+        for (const auto &imageView: swapchainImageViews) {
             vkDestroyImageView(device, imageView, nullptr);
         }
         vkDestroySwapchainKHR(device, swapchain, nullptr);
     }
 
-    Handle<Pipeline> GpuDevice::createPipeline(const PipelineCI &pipelineCI) {
+    Handle<Pipeline> GpuDevice::createPipeline(const PipelineCI &ci) {
         Handle<Pipeline> handle = pipelines.obtain();
         if (!handle.isValid()) {
             return handle;
         }
 
-        for (const auto& stage : pipelineCI.shaderStages.shaders) {
+        Pipeline *pipeline = pipelines.get(handle);
+        ReflectOutput reflectOutput;
+
+        std::vector<VkShaderModule> modules;
+        std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+
+        for (const auto &shaderBinary: ci.shaderStages.shaderBinaries) {
+            reflect(reflectOutput, shaderBinary.spirv, shaderBinary.execModels);
+
+            VkShaderModuleCreateInfo shaderModuleCI{
+                    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .codeSize = shaderBinary.spirv.size() * sizeof(uint32_t),
+                    .pCode = shaderBinary.spirv.data(),
+            };
+
+            VkShaderModule shaderModule;
+            if (vkCreateShaderModule(device, &shaderModuleCI, nullptr, &shaderModule) != VK_SUCCESS) {
+                spdlog::error("Failed to create shader module");
+            }
+            modules.push_back(shaderModule);
+
+            for (const auto &execModel: shaderBinary.execModels) {
+                shaderStages.emplace_back(VkPipelineShaderStageCreateInfo{
+                        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                        .pNext = nullptr,
+                        .flags = 0,
+                        .stage = execModel.stage,
+                        .module = shaderModule,
+                        .pName = execModel.entryPointName,
+                        .pSpecializationInfo = nullptr,
+                });
+            }
+        }
+
+        std::vector<VkDescriptorSetLayout> pipelineSetLayouts;
+        pipelineSetLayouts.reserve(reflectOutput.getSetCount());
+
+        for (const auto &set: reflectOutput.descriptorSets) {
+            uint32_t setIndex = set.first;
+            const std::vector<VkDescriptorSetLayoutBinding> *bindings = &set.second;
+
+            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .bindingCount = static_cast<uint32_t>(bindings->size()),
+                    .pBindings = bindings->data()
+            };
+
+            Handle<DescriptorSetLayout> descriptorSetLayoutHandle = createDescriptorSetLayout(descriptorSetLayoutCI);
+
+            pipeline->descriptorSetLayoutHandles.push_back(descriptorSetLayoutHandle);
+            pipelineSetLayouts.push_back(descriptorSetLayouts.get(descriptorSetLayoutHandle)->descriptorSetLayout);
+        }
+
+        VkPipelineLayoutCreateInfo pipelineLayoutCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .setLayoutCount = static_cast<uint32_t>(pipelineSetLayouts.size()),
+                .pSetLayouts = pipelineSetLayouts.data(),
+                .pushConstantRangeCount = 0, // TODO: push constants reflection
+                .pPushConstantRanges = nullptr,
+        };
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutCI, nullptr, &pipeline->pipelineLayout) != VK_SUCCESS) {
+            spdlog::error("Failed to create pipeline layout");
+        }
+
+        std::vector<VkDynamicState> dynamicStates = {
+                VK_DYNAMIC_STATE_VIEWPORT,
+                VK_DYNAMIC_STATE_SCISSOR,
+        };
+        VkPipelineDynamicStateCreateInfo dynamicStateCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
+                .pDynamicStates = dynamicStates.data()
+        };
+
+        VkPipelineVertexInputStateCreateInfo vertexInputCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .vertexBindingDescriptionCount = static_cast<uint32_t>(ci.vertexInput.vertexBindings.size()),
+                .pVertexBindingDescriptions = ci.vertexInput.vertexBindings.data(),
+                .vertexAttributeDescriptionCount = static_cast<uint32_t>(ci.vertexInput.vertexAttributes.size()),
+                .pVertexAttributeDescriptions = ci.vertexInput.vertexAttributes.data(),
+        };
+
+        VkPipelineInputAssemblyStateCreateInfo inputAssemblyCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                .primitiveRestartEnable = VK_FALSE,
+        };
+
+        VkViewport viewport = {
+                .x = 0.f,
+                .y = 0.f,
+                .width = static_cast<float>(swapchainExtent.width),
+                .height = static_cast<float>(swapchainExtent.height),
+                .minDepth = 0.f,
+                .maxDepth = 1.f,
+        };
+
+        VkRect2D scissor = {
+                .offset = {0, 0},
+                .extent = swapchainExtent,
+        };
+
+        VkPipelineViewportStateCreateInfo viewportStateCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .viewportCount = 1,
+                .pViewports = &viewport,
+                .scissorCount = 1,
+                .pScissors = &scissor,
+        };
+
+        VkPipelineRasterizationStateCreateInfo rasterizerCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .depthClampEnable = VK_FALSE,
+                .rasterizerDiscardEnable = VK_FALSE,
+                .polygonMode = VK_POLYGON_MODE_FILL,
+                .cullMode = ci.rasterization.cullMode,
+                .frontFace = ci.rasterization.frontFace,
+                .depthBiasEnable = VK_FALSE,
+                .depthBiasConstantFactor = 0.f,
+                .depthBiasClamp = 0.f,
+                .depthBiasSlopeFactor = 0.f,
+                .lineWidth = 1.f,
+        };
+
+        // todo: implement multisampling
+        VkPipelineMultisampleStateCreateInfo multisampleCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+                .sampleShadingEnable = VK_FALSE,
+                .minSampleShading = 1.f,
+                .pSampleMask = nullptr,
+                .alphaToCoverageEnable = VK_FALSE,
+                .alphaToOneEnable = VK_FALSE,
+        };
+
+        VkPipelineDepthStencilStateCreateInfo depthStencilCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .depthTestEnable = ci.depthStencil.depthTestEnable ? VK_TRUE : VK_FALSE,
+                .depthWriteEnable = ci.depthStencil.depthWriteEnable ? VK_TRUE : VK_FALSE,
+                .depthCompareOp = ci.depthStencil.depthCompareOp,
+                .depthBoundsTestEnable = VK_FALSE,
+                .stencilTestEnable = ci.depthStencil.stencilTestEnable ? VK_TRUE : VK_FALSE,
+                .front = ci.depthStencil.front,
+                .back = ci.depthStencil.back,
+                .minDepthBounds = 0.f,
+                .maxDepthBounds = 1.f,
+        };
+
+        std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
+        colorBlendAttachments.reserve(ci.colorBlend.attachments.size());
+
+        for (const auto &attachment: ci.colorBlend.attachments) {
+            colorBlendAttachments.emplace_back(
+                    VkPipelineColorBlendAttachmentState{
+                            .blendEnable = attachment.enable ? VK_TRUE : VK_FALSE,
+                            .srcColorBlendFactor = attachment.srcColor,
+                            .dstColorBlendFactor = attachment.dstColor,
+                            .colorBlendOp = attachment.colorOp,
+                            .srcAlphaBlendFactor = attachment.srcAlpha,
+                            .dstAlphaBlendFactor = attachment.dstAlpha,
+                            .alphaBlendOp = attachment.alphaOp,
+                            .colorWriteMask = attachment.colorWriteMask,
+                    }
+            );
+        }
+
+        VkPipelineColorBlendStateCreateInfo colorBlendCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .logicOpEnable = VK_FALSE,
+                .logicOp = VK_LOGIC_OP_COPY,
+                .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
+                .pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data(),
+                .blendConstants = {0.f, 0.f, 0.f, 0.f},
+        };
+
+        VkPipelineRenderingCreateInfo renderingCI = {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+                .pNext = nullptr,
+                .viewMask = 0,
+                .colorAttachmentCount = static_cast<uint32_t>(ci.rendering.colorFormats.size()),
+                .pColorAttachmentFormats = ci.rendering.colorFormats.empty() ? nullptr
+                                                                             : ci.rendering.colorFormats.data(),
+                .depthAttachmentFormat = ci.rendering.depthFormat,
+                .stencilAttachmentFormat = ci.rendering.stencilFormat,
+        };
+
+        VkGraphicsPipelineCreateInfo pipelineCI = {
+                .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+                .pNext = &renderingCI,
+                .flags = 0,
+                .stageCount = static_cast<uint32_t>(shaderStages.size()),
+                .pStages = shaderStages.data(),
+                .pVertexInputState = &vertexInputCI,
+                .pInputAssemblyState = &inputAssemblyCI,
+                .pTessellationState = nullptr, // not using tesselation
+                .pViewportState = &viewportStateCI,
+                .pRasterizationState = &rasterizerCI,
+                .pMultisampleState = &multisampleCI,
+                .pDepthStencilState = &depthStencilCI,
+                .pColorBlendState = &colorBlendCI,
+                .pDynamicState = &dynamicStateCI,
+                .layout = pipeline->pipelineLayout,
+                .renderPass = VK_NULL_HANDLE, // dynamic rendering
+                .subpass = 0,
+                .basePipelineHandle = VK_NULL_HANDLE,
+                .basePipelineIndex = 0,
+        };
+
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, // todo: pipeline cache
+                                      1, &pipelineCI, nullptr, &pipeline->pipeline) != VK_SUCCESS) {
+            spdlog::error("Failed to create graphics pipeline");
+        }
+        pipeline->bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS; // todo: compute
+
+        for (const auto &module: modules) {
+            vkDestroyShaderModule(device, module, nullptr);
         }
 
         return handle;
+    }
+
+    void GpuDevice::destroyPipeline(Handle<Pipeline> handle) {
+        if (!handle.isValid()) {
+            spdlog::error("Invalid pipeline handle");
+            return;
+        }
+
+        Pipeline *pipeline = pipelines.get(handle);
+
+        vkDestroyPipelineLayout(device, pipeline->pipelineLayout, nullptr);
+
+        for (const auto &descSetHandle: pipeline->descriptorSetLayoutHandles) {
+            destroyDescriptorSetLayout(descSetHandle);
+        }
+
+        vkDestroyPipeline(device, pipeline->pipeline, nullptr);
+
+        pipelines.release(handle);
+    }
+
+    void GpuDevice::reflect(ReflectOutput &reflection, const std::vector<uint32_t> &spirv,
+                            const std::span<ShaderExecModel> &execModels) const {
+        using namespace spirv_cross;
+
+        Compiler comp(spirv);
+        auto entryPoints = comp.get_entry_points_and_stages();
+        const char *stageString;
+
+        for (const auto &model: execModels) {
+            spv::ExecutionModel spvExecModel = spv::ExecutionModelMax;
+            VkShaderStageFlags stageFlag = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+            switch (model.stage) {
+                case VK_SHADER_STAGE_VERTEX_BIT:
+                    spvExecModel = spv::ExecutionModelVertex;
+                    stageFlag = VK_SHADER_STAGE_VERTEX_BIT;
+                    stageString = "Vertex";
+                    break;
+                case VK_SHADER_STAGE_FRAGMENT_BIT:
+                    spvExecModel = spv::ExecutionModelFragment;
+                    stageFlag = VK_SHADER_STAGE_FRAGMENT_BIT;
+                    stageString = "Fragment";
+                    break;
+                case VK_SHADER_STAGE_COMPUTE_BIT:
+                    spvExecModel = spv::ExecutionModelGLCompute;
+                    stageFlag = VK_SHADER_STAGE_COMPUTE_BIT;
+                    stageString = "Compute";
+                    break;
+                default:
+                    spdlog::error("Invalid execution model");
+                    break;
+            }
+
+            comp.set_entry_point(model.entryPointName, spvExecModel);
+
+            ShaderResources res = comp.get_shader_resources();
+            for (auto &uniform: res.uniform_buffers) {
+                uint32_t set = comp.get_decoration(uniform.id, spv::DecorationDescriptorSet);
+                uint32_t binding = comp.get_decoration(uniform.id, spv::DecorationBinding);
+
+                spdlog::info("{} shader: Found UBO {} at set = {}, binding = {}",
+                             stageString, uniform.name, set, binding);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, stageFlag);
+            }
+        }
+    }
+
+    Handle<DescriptorSetLayout> GpuDevice::createDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo &ci) {
+        Handle<DescriptorSetLayout> handle = descriptorSetLayouts.obtain();
+        if (!handle.isValid()) {
+            return handle;
+        }
+
+        DescriptorSetLayout *layout = descriptorSetLayouts.get(handle);
+        if (vkCreateDescriptorSetLayout(device, &ci, nullptr, &layout->descriptorSetLayout) != VK_SUCCESS) {
+            spdlog::error("Failed to create descriptor set layout");
+        }
+
+        return handle;
+    }
+
+    void GpuDevice::destroyDescriptorSetLayout(Handle<DescriptorSetLayout> handle) {
+        if (!handle.isValid()) {
+            spdlog::error("Invalid descriptor set layout handle");
+            return;
+        }
+
+        DescriptorSetLayout *layout = descriptorSetLayouts.get(handle);
+        vkDestroyDescriptorSetLayout(device, layout->descriptorSetLayout, nullptr);
+
+        descriptorSetLayouts.release(handle);
     }
 }

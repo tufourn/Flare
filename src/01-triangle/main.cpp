@@ -3,28 +3,40 @@
 #include "FlareGraphics/GpuDevice.h"
 #include "FlareGraphics/ShaderCompiler.h"
 
-struct TriangleApp : Flare::Application {
-    void init(const Flare::ApplicationConfig& appConfig) override {
-        Flare::WindowConfig windowConfig {};
+using namespace Flare;
+
+struct TriangleApp : Application {
+    void init(const ApplicationConfig &appConfig) override {
+        WindowConfig windowConfig{};
         windowConfig
-            .setWidth(appConfig.width)
-            .setHeight(appConfig.height)
-            .setName(appConfig.name);
+                .setWidth(appConfig.width)
+                .setHeight(appConfig.height)
+                .setName(appConfig.name);
 
         window.init(windowConfig);
 
-        Flare::GpuDeviceCreateInfo gpuDeviceCI {
-            .glfwWindow = window.glfwWindow,
+        GpuDeviceCreateInfo gpuDeviceCI{
+                .glfwWindow = window.glfwWindow,
         };
 
         gpu.init(gpuDeviceCI);
-
         shaderCompiler.init();
 
-        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/shaders.slang");
+//        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/shaders.slang");
+        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_hardcode.slang");
 
         Flare::ReflectOutput reflection;
-        shaderCompiler.reflect(reflection, shader, Flare::ExecModel::eVertex | Flare::ExecModel::eFragment);
+        std::vector<ShaderExecModel> execModels = {
+                {VK_SHADER_STAGE_VERTEX_BIT,   "main"},
+                {VK_SHADER_STAGE_FRAGMENT_BIT, "main"},
+        };
+
+        PipelineCI pipelineCI;
+        pipelineCI.shaderStages.addBinary({execModels, shader});
+
+        auto pipeline = gpu.createPipeline(pipelineCI);
+
+        gpu.destroyPipeline(pipeline);
     }
 
     void loop() override {
@@ -44,11 +56,11 @@ struct TriangleApp : Flare::Application {
 };
 
 int main() {
-    Flare::ApplicationConfig appConfig {};
+    Flare::ApplicationConfig appConfig{};
     appConfig
-        .setWidth(800)
-        .setHeight(600)
-        .setName("Triangle");
+            .setWidth(800)
+            .setHeight(600)
+            .setName("Triangle");
 
     TriangleApp app;
     app.run(appConfig);

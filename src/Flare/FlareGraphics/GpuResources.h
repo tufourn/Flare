@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cassert>
 #include <vector>
+#include <span>
 #include <spdlog/spdlog.h>
 
 namespace Flare {
@@ -54,44 +55,30 @@ namespace Flare {
             }
         }
 
-        const T& get(Handle<T> handle) const {
+        T *get(Handle<T> handle) {
             if (handle.isValid() && handle.index < poolSize) {
-                return data[handle.index];
+                return &data[handle.index];
             } else {
                 spdlog::error("ResourcePool: Invalid handle access");
+                return nullptr;
             }
         }
     };
 
-    struct Shader {
-        const char *code = nullptr;
-        uint32_t size = 0;
-        VkShaderStageFlagBits type = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    struct ShaderExecModel {
+        VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+        const char *entryPointName = "main";
     };
 
-    enum class ExecModel : uint32_t {
-        eNone = 0,
-        eVertex = 1,
-        eFragment = 2,
-        eCompute = 4,
+    struct ShaderBinary {
+        const std::span<ShaderExecModel> &execModels;
+        const std::vector<uint32_t> &spirv;
     };
-
-    inline ExecModel operator|(ExecModel lhs, ExecModel rhs) {
-        return static_cast<ExecModel>(
-                static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs)
-        );
-    }
-
-    inline ExecModel operator&(ExecModel lhs, ExecModel rhs) {
-        return static_cast<ExecModel>(
-                static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs)
-        );
-    }
 
     struct ShaderStageCI {
-        std::vector<Shader> shaders;
+        std::vector<ShaderBinary> shaderBinaries;
 
-        ShaderStageCI &addStage(Shader stage);
+        ShaderStageCI &addBinary(ShaderBinary binary);
     };
 
     struct VertexInputCI {
@@ -104,7 +91,7 @@ namespace Flare {
     };
 
     struct RasterizationCI {
-        VkCullModeFlagBits cullMode = VK_CULL_MODE_NONE;
+        VkCullModeFlags cullMode = VK_CULL_MODE_NONE;
         VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     };
 
@@ -155,9 +142,23 @@ namespace Flare {
         ColorBlendCI &addAttachment(ColorBlendAttachment attachment);
     };
 
-    struct DescriptorSetLayoutCI {
-        std::vector<VkDescriptorSetLayoutBinding> bindings;
-        uint32_t index = 0;
+    struct ReflectOutput {
+        std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> descriptorSets;
+
+        void addBinding(uint32_t set, uint32_t binding, uint32_t count,
+                        VkDescriptorType type, VkShaderStageFlags stageFlag);
+
+        size_t getSetCount() { return descriptorSets.size(); }
+    };
+
+    struct RenderingCI {
+        std::vector<VkFormat> colorFormats;
+        VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+        VkFormat stencilFormat = VK_FORMAT_UNDEFINED;
+    };
+
+    struct DescriptorSetLayout {
+        VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
     };
 
     struct PipelineCI {
@@ -166,12 +167,13 @@ namespace Flare {
         RasterizationCI rasterization;
         DepthStencilCI depthStencil;
         ColorBlendCI colorBlend;
-        bool isCompute = false;
+        RenderingCI rendering;
     };
 
     struct Pipeline {
         VkPipeline pipeline;
         VkPipelineLayout pipelineLayout;
         VkPipelineBindPoint bindPoint;
+        std::vector<Handle<DescriptorSetLayout>> descriptorSetLayoutHandles;
     };
 }

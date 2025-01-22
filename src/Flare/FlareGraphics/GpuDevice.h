@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <span>
 
 #include "GpuResources.h"
 
@@ -13,29 +14,44 @@ struct GLFWwindow;
 namespace Flare {
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
+        uint32_t descriptorSetLayouts = 256;
     };
 
     struct GpuDeviceCreateInfo {
-        GLFWwindow* glfwWindow = nullptr;
+        GLFWwindow *glfwWindow = nullptr;
         ResourcePoolCI resourcePoolCI;
     };
 
     struct GpuDevice {
-        void init(GpuDeviceCreateInfo& gpuDeviceCI);
+        void init(GpuDeviceCreateInfo &gpuDeviceCI);
+
         void shutdown();
 
         void setSurfaceFormat(VkFormat format);
+
         void setPresentMode(VkPresentModeKHR mode);
+
         void setSwapchainExtent();
+
         void createSwapchain();
+
         void destroySwapchain();
 
-        Handle<Pipeline> createPipeline(const PipelineCI& pipelineCI);
+        void reflect(ReflectOutput &reflection, const std::vector<uint32_t> &spirv,
+                     const std::span<ShaderExecModel> &execModels) const;
+
+        Handle<Pipeline> createPipeline(const PipelineCI &ci);
+
+        void destroyPipeline(Handle<Pipeline> handle);
+
+        Handle<DescriptorSetLayout> createDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo &ci);
+
+        void destroyDescriptorSetLayout(Handle<DescriptorSetLayout> handle);
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
 
-        GLFWwindow* glfwWindow;
+        GLFWwindow *glfwWindow;
         VkSurfaceKHR surface;
         VkSwapchainKHR swapchain;
         VkSurfaceFormatKHR surfaceFormat;
@@ -62,5 +78,6 @@ namespace Flare {
         VmaAllocator allocator;
 
         ResourcePool<Pipeline> pipelines;
+        ResourcePool<DescriptorSetLayout> descriptorSetLayouts;
     };
 }
