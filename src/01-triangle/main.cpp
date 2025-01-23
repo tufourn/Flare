@@ -3,6 +3,8 @@
 #include "FlareGraphics/GpuDevice.h"
 #include "FlareGraphics/ShaderCompiler.h"
 
+#include "FlareGraphics/VkHelper.h"
+
 using namespace Flare;
 
 struct TriangleApp : Application {
@@ -34,9 +36,7 @@ struct TriangleApp : Application {
         PipelineCI pipelineCI;
         pipelineCI.shaderStages.addBinary({execModels, shader});
 
-        auto pipeline = gpu.createPipeline(pipelineCI);
-
-        gpu.destroyPipeline(pipeline);
+        pipeline = gpu.createPipeline(pipelineCI);
     }
 
     void loop() override {
@@ -44,11 +44,38 @@ struct TriangleApp : Application {
             window.pollEvents();
             gpu.newFrame();
 
+            VkCommandBuffer cmd = gpu.getCommandBuffer();
+            VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+                                      VK_IMAGE_LAYOUT_UNDEFINED,
+                                      VK_IMAGE_LAYOUT_GENERAL);
+
+            VkClearColorValue clearValue;
+            float flash = std::abs(std::sin(gpu.absoluteFrame / 1200.f));
+            clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+
+            VkImageSubresourceRange clearRange = {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = VK_REMAINING_MIP_LEVELS,
+                    .baseArrayLayer = 0,
+                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
+            };
+
+            vkCmdClearColorImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL,
+                                 &clearValue, 1, &clearRange);
+
+            VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+                                      VK_IMAGE_LAYOUT_GENERAL,
+                                      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+            vkEndCommandBuffer(cmd);
+
             gpu.present();
         }
     }
 
     void shutdown() override {
+        gpu.destroyPipeline(pipeline);
         gpu.shutdown();
         window.shutdown();
     }
@@ -56,6 +83,8 @@ struct TriangleApp : Application {
     Flare::GpuDevice gpu;
     Flare::Window window;
     Flare::ShaderCompiler shaderCompiler;
+
+    Handle<Pipeline> pipeline;
 };
 
 int main() {

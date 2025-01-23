@@ -145,6 +145,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/GpuResources.h
         src/Flare/FlareGraphics/ShaderCompiler.cpp
         src/Flare/FlareGraphics/ShaderCompiler.h
+        src/Flare/FlareGraphics/VkHelper.cpp
+        src/Flare/FlareGraphics/VkHelper.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal

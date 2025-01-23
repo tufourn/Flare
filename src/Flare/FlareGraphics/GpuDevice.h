@@ -6,13 +6,14 @@
 #include <cstdint>
 #include <vector>
 #include <span>
+#include <array>
 
 #include "GpuResources.h"
 
 struct GLFWwindow;
 
 namespace Flare {
-    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+    static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
 
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
@@ -45,6 +46,8 @@ namespace Flare {
 
         void present();
 
+        VkCommandBuffer getCommandBuffer(bool begin = true);
+
         void reflect(ReflectOutput &reflection, const std::vector<uint32_t> &spirv,
                      const std::span<ShaderExecModel> &execModels) const;
 
@@ -68,6 +71,7 @@ namespace Flare {
         VkSurfaceCapabilitiesKHR surfaceCapabilities;
         std::vector<VkSurfaceFormatKHR> surfaceFormats;
         std::vector<VkPresentModeKHR> presentModes;
+        std::vector<VkImage> swapchainImages;
         std::vector<VkImageView> swapchainImageViews;
         uint32_t swapchainImageIndex = 0;
         bool resized = false;
@@ -75,9 +79,12 @@ namespace Flare {
         uint32_t currentFrame = 0;
         uint64_t absoluteFrame = 0;
 
-        VkSemaphore imageAcquiredSemaphores[MAX_FRAMES_IN_FLIGHT];
-        VkSemaphore renderCompletedSemaphores[MAX_FRAMES_IN_FLIGHT];
+        std::array<VkSemaphore, FRAMES_IN_FLIGHT> imageAcquiredSemaphores;
+        std::array<VkSemaphore, FRAMES_IN_FLIGHT> renderCompletedSemaphores;
         VkSemaphore graphicsTimelineSemaphore;
+
+        std::array<VkCommandPool, FRAMES_IN_FLIGHT> commandPools;
+        std::array<VkCommandBuffer, FRAMES_IN_FLIGHT> commandBuffers;
 
         VkPhysicalDevice physicalDevice;
         VkPhysicalDeviceProperties physicalDeviceProperties;

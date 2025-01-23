@@ -9,7 +9,6 @@
 #include <optional>
 #include <algorithm>
 #include <spirv_cross.hpp>
-#include <array>
 
 namespace Flare {
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -413,7 +412,7 @@ namespace Flare {
         };
 
         // we need these per-frame semaphores because vulkan wsi swapchain doesn't support timeline semaphores
-        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
             vkCreateSemaphore(device, &semaphoreCI, nullptr, &imageAcquiredSemaphores[i]);
             vkCreateSemaphore(device, &semaphoreCI, nullptr, &renderCompletedSemaphores[i]);
         }
@@ -427,14 +426,48 @@ namespace Flare {
         };
         semaphoreCI.pNext = &semaphoreTypeCI;
         vkCreateSemaphore(device, &semaphoreCI, nullptr, &graphicsTimelineSemaphore);
+
+        VkCommandPoolCreateInfo commandPoolCI = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                .queueFamilyIndex = mainFamily, // todo: only main queue for now
+        };
+
+        VkCommandBufferAllocateInfo commandAllocInfo = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .commandPool = VK_NULL_HANDLE,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = 1,
+        };
+
+        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
+            if (vkCreateCommandPool(device, &commandPoolCI, nullptr, &commandPools[i]) != VK_SUCCESS) {
+                spdlog::error("Failed to create command pool");
+            }
+
+            commandAllocInfo.commandPool = commandPools[i];
+
+            if (vkAllocateCommandBuffers(device, &commandAllocInfo, &commandBuffers[i]) != VK_SUCCESS) {
+                spdlog::error("Failed to allocated command buffer");
+            }
+        }
     }
 
     void GpuDevice::shutdown() {
+        vkDeviceWaitIdle(device);
+
+        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
+            vkDestroyCommandPool(device, commandPools[i], nullptr);
+        }
+
         vkDestroySemaphore(device, graphicsTimelineSemaphore, nullptr);
-        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, imageAcquiredSemaphores[i], nullptr);
             vkDestroySemaphore(device, renderCompletedSemaphores[i], nullptr);
         }
+
         destroySwapchain();
         vmaDestroyAllocator(allocator);
         vkDestroyDevice(device, nullptr);
@@ -541,7 +574,7 @@ namespace Flare {
 
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
         swapchainImageViews.resize(imageCount);
-        std::vector<VkImage> swapchainImages(imageCount);
+        swapchainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
 
         for (size_t i = 0; i < imageCount; i++) {
@@ -918,8 +951,8 @@ namespace Flare {
     }
 
     void GpuDevice::newFrame() {
-        if (absoluteFrame >= MAX_FRAMES_IN_FLIGHT) {
-            uint64_t graphicsTimelineWaitValue = absoluteFrame - MAX_FRAMES_IN_FLIGHT + 1;
+        if (absoluteFrame >= FRAMES_IN_FLIGHT) {
+            uint64_t graphicsTimelineWaitValue = absoluteFrame - FRAMES_IN_FLIGHT + 1;
 
             VkSemaphoreWaitInfo waitInfo = {
                     .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
@@ -930,7 +963,7 @@ namespace Flare {
                     .pValues = &graphicsTimelineWaitValue,
             };
 
-            vkWaitSemaphores(device, &waitInfo, 0);
+            vkWaitSemaphores(device, &waitInfo, UINT64_MAX);
         }
 
         VkSemaphore *imageAcquiredSemaphore = &imageAcquiredSemaphores[currentFrame];
@@ -939,6 +972,8 @@ namespace Flare {
         if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
             // todo: resize swapchain
         }
+
+        vkResetCommandPool(device, commandPools[currentFrame], 0);
     }
 
     void GpuDevice::present() {
@@ -958,13 +993,13 @@ namespace Flare {
                 }
         );
 
-        if (absoluteFrame >= MAX_FRAMES_IN_FLIGHT) {
+        if (absoluteFrame >= FRAMES_IN_FLIGHT) {
             waitSemaphores.emplace_back(
                     VkSemaphoreSubmitInfo{
                             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                             .pNext = nullptr,
                             .semaphore = graphicsTimelineSemaphore,
-                            .value = absoluteFrame - MAX_FRAMES_IN_FLIGHT + 1,
+                            .value = absoluteFrame - FRAMES_IN_FLIGHT + 1,
                             .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
                             .deviceIndex = 0,
                     }
@@ -990,14 +1025,21 @@ namespace Flare {
                 }
         };
 
+        VkCommandBufferSubmitInfo commandBufferInfo = {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+                .pNext = nullptr,
+                .commandBuffer = commandBuffers[currentFrame],
+                .deviceMask = 0,
+        };
+
         VkSubmitInfo2 submitInfo = {
                 .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
                 .pNext = nullptr,
                 .flags = 0,
                 .waitSemaphoreInfoCount = static_cast<uint32_t>(waitSemaphores.size()),
                 .pWaitSemaphoreInfos = waitSemaphores.data(),
-                .commandBufferInfoCount = 0,
-                .pCommandBufferInfos = nullptr,
+                .commandBufferInfoCount = 1,
+                .pCommandBufferInfos = &commandBufferInfo,
                 .signalSemaphoreInfoCount = static_cast<uint32_t>(signalSemaphores.size()),
                 .pSignalSemaphoreInfos = signalSemaphores.data(),
         };
@@ -1023,7 +1065,26 @@ namespace Flare {
     }
 
     void GpuDevice::advanceFrameCounter() {
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        currentFrame = (currentFrame + 1) % FRAMES_IN_FLIGHT;
         absoluteFrame++;
+    }
+
+    VkCommandBuffer GpuDevice::getCommandBuffer(bool begin) {
+        VkCommandBuffer cmdBuf = commandBuffers[currentFrame];
+
+        if (begin) {
+            vkResetCommandBuffer(cmdBuf, 0);
+
+            VkCommandBufferBeginInfo beginInfo = {
+                    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                    .pNext = nullptr,
+                    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+                    .pInheritanceInfo = nullptr,
+            };
+
+            vkBeginCommandBuffer(cmdBuf, &beginInfo);
+        }
+
+        return cmdBuf;
     }
 }
