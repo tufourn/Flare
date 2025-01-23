@@ -12,7 +12,7 @@ namespace Flare {
 
     template<typename T>
     struct Handle {
-        uint32_t index;
+        uint32_t index = invalidIndex;
 
         bool isValid() const { return index != invalidIndex; }
     };

@@ -789,21 +789,32 @@ namespace Flare {
         };
 
         std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments;
-        colorBlendAttachments.reserve(ci.colorBlend.attachments.size());
-
-        for (const auto &attachment: ci.colorBlend.attachments) {
+        if (ci.colorBlend.attachments.empty()) {
             colorBlendAttachments.emplace_back(
                     VkPipelineColorBlendAttachmentState{
-                            .blendEnable = attachment.enable ? VK_TRUE : VK_FALSE,
-                            .srcColorBlendFactor = attachment.srcColor,
-                            .dstColorBlendFactor = attachment.dstColor,
-                            .colorBlendOp = attachment.colorOp,
-                            .srcAlphaBlendFactor = attachment.srcAlpha,
-                            .dstAlphaBlendFactor = attachment.dstAlpha,
-                            .alphaBlendOp = attachment.alphaOp,
-                            .colorWriteMask = attachment.colorWriteMask,
+                            .blendEnable = VK_FALSE,
+                            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT |
+                                              VK_COLOR_COMPONENT_G_BIT |
+                                              VK_COLOR_COMPONENT_B_BIT |
+                                              VK_COLOR_COMPONENT_A_BIT,
                     }
             );
+        } else {
+            colorBlendAttachments.reserve(ci.colorBlend.attachments.size());
+            for (const auto &attachment: ci.colorBlend.attachments) {
+                colorBlendAttachments.emplace_back(
+                        VkPipelineColorBlendAttachmentState{
+                                .blendEnable = attachment.enable ? VK_TRUE : VK_FALSE,
+                                .srcColorBlendFactor = attachment.srcColor,
+                                .dstColorBlendFactor = attachment.dstColor,
+                                .colorBlendOp = attachment.colorOp,
+                                .srcAlphaBlendFactor = attachment.srcAlpha,
+                                .dstAlphaBlendFactor = attachment.dstAlpha,
+                                .alphaBlendOp = attachment.alphaOp,
+                                .colorWriteMask = attachment.colorWriteMask,
+                        }
+                );
+            }
         }
 
         VkPipelineColorBlendStateCreateInfo colorBlendCI = {
@@ -813,7 +824,7 @@ namespace Flare {
                 .logicOpEnable = VK_FALSE,
                 .logicOp = VK_LOGIC_OP_COPY,
                 .attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size()),
-                .pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data(),
+                .pAttachments = colorBlendAttachments.data(),
                 .blendConstants = {0.f, 0.f, 0.f, 0.f},
         };
 
@@ -868,6 +879,8 @@ namespace Flare {
             spdlog::error("Invalid pipeline handle");
             return;
         }
+
+        vkDeviceWaitIdle(device); //TODO: destroy stuff with a resource deletion queue
 
         Pipeline *pipeline = pipelines.get(handle);
 
