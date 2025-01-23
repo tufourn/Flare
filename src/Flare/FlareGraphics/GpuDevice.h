@@ -12,6 +12,8 @@
 struct GLFWwindow;
 
 namespace Flare {
+    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
         uint32_t descriptorSetLayouts = 256;
@@ -37,6 +39,12 @@ namespace Flare {
 
         void destroySwapchain();
 
+        void newFrame();
+
+        void advanceFrameCounter();
+
+        void present();
+
         void reflect(ReflectOutput &reflection, const std::vector<uint32_t> &spirv,
                      const std::span<ShaderExecModel> &execModels) const;
 
@@ -61,6 +69,15 @@ namespace Flare {
         std::vector<VkSurfaceFormatKHR> surfaceFormats;
         std::vector<VkPresentModeKHR> presentModes;
         std::vector<VkImageView> swapchainImageViews;
+        uint32_t swapchainImageIndex = 0;
+        bool resized = false;
+
+        uint32_t currentFrame = 0;
+        uint64_t absoluteFrame = 0;
+
+        VkSemaphore imageAcquiredSemaphores[MAX_FRAMES_IN_FLIGHT];
+        VkSemaphore renderCompletedSemaphores[MAX_FRAMES_IN_FLIGHT];
+        VkSemaphore graphicsTimelineSemaphore;
 
         VkPhysicalDevice physicalDevice;
         VkPhysicalDeviceProperties physicalDeviceProperties;

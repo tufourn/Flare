@@ -42,6 +42,9 @@ struct TriangleApp : Application {
     void loop() override {
         while (!window.shouldClose()) {
             window.pollEvents();
+            gpu.newFrame();
+
+            gpu.present();
         }
     }
 

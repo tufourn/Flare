@@ -9,6 +9,7 @@
 #include <optional>
 #include <algorithm>
 #include <spirv_cross.hpp>
+#include <array>
 
 namespace Flare {
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -307,9 +308,14 @@ namespace Flare {
                 .pNext = &bufferDeviceAddressFeatures,
         };
 
+        VkPhysicalDeviceTimelineSemaphoreFeatures timelineSemaphoreFeatures{
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES,
+                .pNext = &descriptorIndexingFeatures,
+        };
+
         VkPhysicalDeviceFeatures2 features{
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &descriptorIndexingFeatures,
+                .pNext = &timelineSemaphoreFeatures,
         };
 
         vkGetPhysicalDeviceFeatures2(physicalDevice, &features);
@@ -399,9 +405,36 @@ namespace Flare {
         setPresentMode(VK_PRESENT_MODE_MAILBOX_KHR);
         setSwapchainExtent();
         createSwapchain();
+
+        VkSemaphoreCreateInfo semaphoreCI = {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+        };
+
+        // we need these per-frame semaphores because vulkan wsi swapchain doesn't support timeline semaphores
+        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vkCreateSemaphore(device, &semaphoreCI, nullptr, &imageAcquiredSemaphores[i]);
+            vkCreateSemaphore(device, &semaphoreCI, nullptr, &renderCompletedSemaphores[i]);
+        }
+
+        // using timeline semaphores for synchronization
+        VkSemaphoreTypeCreateInfo semaphoreTypeCI = {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+                .pNext = nullptr,
+                .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+                .initialValue = 0,
+        };
+        semaphoreCI.pNext = &semaphoreTypeCI;
+        vkCreateSemaphore(device, &semaphoreCI, nullptr, &graphicsTimelineSemaphore);
     }
 
     void GpuDevice::shutdown() {
+        vkDestroySemaphore(device, graphicsTimelineSemaphore, nullptr);
+        for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            vkDestroySemaphore(device, imageAcquiredSemaphores[i], nullptr);
+            vkDestroySemaphore(device, renderCompletedSemaphores[i], nullptr);
+        }
         destroySwapchain();
         vmaDestroyAllocator(allocator);
         vkDestroyDevice(device, nullptr);
@@ -826,21 +859,17 @@ namespace Flare {
 
         for (const auto &model: execModels) {
             spv::ExecutionModel spvExecModel = spv::ExecutionModelMax;
-            VkShaderStageFlags stageFlag = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
             switch (model.stage) {
                 case VK_SHADER_STAGE_VERTEX_BIT:
                     spvExecModel = spv::ExecutionModelVertex;
-                    stageFlag = VK_SHADER_STAGE_VERTEX_BIT;
                     stageString = "Vertex";
                     break;
                 case VK_SHADER_STAGE_FRAGMENT_BIT:
                     spvExecModel = spv::ExecutionModelFragment;
-                    stageFlag = VK_SHADER_STAGE_FRAGMENT_BIT;
                     stageString = "Fragment";
                     break;
                 case VK_SHADER_STAGE_COMPUTE_BIT:
                     spvExecModel = spv::ExecutionModelGLCompute;
-                    stageFlag = VK_SHADER_STAGE_COMPUTE_BIT;
                     stageString = "Compute";
                     break;
                 default:
@@ -857,7 +886,7 @@ namespace Flare {
 
                 spdlog::info("{} shader: Found UBO {} at set = {}, binding = {}",
                              stageString, uniform.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, stageFlag);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, model.stage);
             }
         }
     }
@@ -886,5 +915,115 @@ namespace Flare {
         vkDestroyDescriptorSetLayout(device, layout->descriptorSetLayout, nullptr);
 
         descriptorSetLayouts.release(handle);
+    }
+
+    void GpuDevice::newFrame() {
+        if (absoluteFrame >= MAX_FRAMES_IN_FLIGHT) {
+            uint64_t graphicsTimelineWaitValue = absoluteFrame - MAX_FRAMES_IN_FLIGHT + 1;
+
+            VkSemaphoreWaitInfo waitInfo = {
+                    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .semaphoreCount = 1,
+                    .pSemaphores = &graphicsTimelineSemaphore,
+                    .pValues = &graphicsTimelineWaitValue,
+            };
+
+            vkWaitSemaphores(device, &waitInfo, 0);
+        }
+
+        VkSemaphore *imageAcquiredSemaphore = &imageAcquiredSemaphores[currentFrame];
+        VkResult acquireResult = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX,
+                                                       *imageAcquiredSemaphore, VK_NULL_HANDLE, &swapchainImageIndex);
+        if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
+            // todo: resize swapchain
+        }
+    }
+
+    void GpuDevice::present() {
+        VkSemaphore *imageAcquiredSemaphore = &imageAcquiredSemaphores[currentFrame];
+        VkSemaphore *renderCompletedSemaphore = &renderCompletedSemaphores[currentFrame];
+
+        std::vector<VkSemaphoreSubmitInfo> waitSemaphores;
+        waitSemaphores.reserve(2);
+        waitSemaphores.emplace_back(
+                VkSemaphoreSubmitInfo{
+                        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                        .pNext = nullptr,
+                        .semaphore = *imageAcquiredSemaphore,
+                        .value = 0,
+                        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .deviceIndex = 0,
+                }
+        );
+
+        if (absoluteFrame >= MAX_FRAMES_IN_FLIGHT) {
+            waitSemaphores.emplace_back(
+                    VkSemaphoreSubmitInfo{
+                            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                            .pNext = nullptr,
+                            .semaphore = graphicsTimelineSemaphore,
+                            .value = absoluteFrame - MAX_FRAMES_IN_FLIGHT + 1,
+                            .stageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                            .deviceIndex = 0,
+                    }
+            );
+        }
+
+        std::array<VkSemaphoreSubmitInfo, 2> signalSemaphores = {
+                VkSemaphoreSubmitInfo{
+                        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                        .pNext = nullptr,
+                        .semaphore = *renderCompletedSemaphore,
+                        .value = 0,
+                        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .deviceIndex = 0,
+                },
+                VkSemaphoreSubmitInfo{
+                        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                        .pNext = nullptr,
+                        .semaphore = graphicsTimelineSemaphore,
+                        .value = absoluteFrame + 1,
+                        .stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .deviceIndex = 0,
+                }
+        };
+
+        VkSubmitInfo2 submitInfo = {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+                .pNext = nullptr,
+                .flags = 0,
+                .waitSemaphoreInfoCount = static_cast<uint32_t>(waitSemaphores.size()),
+                .pWaitSemaphoreInfos = waitSemaphores.data(),
+                .commandBufferInfoCount = 0,
+                .pCommandBufferInfos = nullptr,
+                .signalSemaphoreInfoCount = static_cast<uint32_t>(signalSemaphores.size()),
+                .pSignalSemaphoreInfos = signalSemaphores.data(),
+        };
+
+        if (vkQueueSubmit2(mainQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
+            spdlog::error("Error submitting");
+        }
+
+        VkPresentInfoKHR presentInfo = {
+                .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+                .pNext = nullptr,
+                .waitSemaphoreCount = 1,
+                .pWaitSemaphores = renderCompletedSemaphore,
+                .swapchainCount = 1,
+                .pSwapchains = &swapchain,
+                .pImageIndices = &swapchainImageIndex,
+                .pResults = nullptr,
+        };
+
+        VkResult result = vkQueuePresentKHR(mainQueue, &presentInfo);
+
+        advanceFrameCounter();
+    }
+
+    void GpuDevice::advanceFrameCounter() {
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        absoluteFrame++;
     }
 }
