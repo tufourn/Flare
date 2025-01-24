@@ -2,12 +2,24 @@
 #include "FlareApp/Window.h"
 #include "FlareGraphics/GpuDevice.h"
 #include "FlareGraphics/ShaderCompiler.h"
+#include <glm/glm.hpp>
 
 #include "FlareGraphics/VkHelper.h"
 
 using namespace Flare;
 
 struct TriangleApp : Application {
+    struct Vertex {
+        glm::vec2 position;
+        glm::vec3 color;
+    };
+
+    const std::vector<Vertex> vertices = {
+            {{0.0f,  -0.5f}, {1.0f, 0.0f, 0.0f}},
+            {{0.5f,  0.5f},  {0.0f, 1.0f, 0.0f}},
+            {{-0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}}
+    };
+
     void init(const ApplicationConfig &appConfig) override {
         WindowConfig windowConfig{};
         windowConfig
@@ -25,7 +37,8 @@ struct TriangleApp : Application {
         shaderCompiler.init();
 
 //        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/shaders.slang");
-        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_hardcode.slang");
+//        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_hardcode.slang");
+        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_vertexbuffer.slang");
 
         Flare::ReflectOutput reflection;
         std::vector<ShaderExecModel> execModels = {
@@ -36,37 +49,53 @@ struct TriangleApp : Application {
         PipelineCI pipelineCI;
         pipelineCI.shaderStages.addBinary({execModels, shader});
         pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
+        pipelineCI.vertexInput
+                .addBinding(
+                        VkVertexInputBindingDescription{
+                                .binding = 0,
+                                .stride = sizeof(Vertex),
+                                .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+                        }
+                )
+                .addAttribute(
+                        VkVertexInputAttributeDescription{
+                                .location = 0,
+                                .binding = 0,
+                                .format = VK_FORMAT_R32G32_SFLOAT,
+                                .offset = static_cast<uint32_t>(offsetof(Vertex, position)),
+                        }
+                )
+                .addAttribute(
+                        VkVertexInputAttributeDescription{
+                                .location = 1,
+                                .binding = 0,
+                                .format = VK_FORMAT_R32G32B32_SFLOAT,
+                                .offset = static_cast<uint32_t>(offsetof(Vertex, color)),
+                        }
+                );
 
         pipeline = gpu.createPipeline(pipelineCI);
+
+        BufferCI vertexBufferCI = {
+                .size = sizeof(Vertex) * vertices.size(),
+                .usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                .mapped = true,
+                .initialData = (void *) vertices.data(),
+        };
+
+        vertexBuffer = gpu.createBuffer(vertexBufferCI);
+
     }
 
     void loop() override {
         while (!window.shouldClose()) {
+            spdlog::info("frame {}", gpu.absoluteFrame);
             window.pollEvents();
             gpu.newFrame();
 
             VkCommandBuffer cmd = gpu.getCommandBuffer();
             VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
                                       VK_IMAGE_LAYOUT_UNDEFINED,
-                                      VK_IMAGE_LAYOUT_GENERAL);
-
-            VkClearColorValue clearValue;
-            float flash = std::abs(std::sin(gpu.absoluteFrame / 1200.f));
-            clearValue = {{0.0f, 0.0f, flash, 1.0f}};
-
-            VkImageSubresourceRange clearRange = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = VK_REMAINING_MIP_LEVELS,
-                    .baseArrayLayer = 0,
-                    .layerCount = VK_REMAINING_ARRAY_LAYERS,
-            };
-
-            vkCmdClearColorImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL,
-                                 &clearValue, 1, &clearRange);
-
-            VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-                                      VK_IMAGE_LAYOUT_GENERAL,
                                       VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
             VkRenderingAttachmentInfo colorAttachment = {
@@ -82,7 +111,7 @@ struct TriangleApp : Application {
                     .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
                     .pNext = nullptr,
                     .flags = 0,
-                    .renderArea = { VkOffset2D{0, 0}, gpu.swapchainExtent },
+                    .renderArea = {VkOffset2D{0, 0}, gpu.swapchainExtent},
                     .layerCount = 1,
                     .viewMask = 0,
                     .colorAttachmentCount = 1,
@@ -94,9 +123,13 @@ struct TriangleApp : Application {
             vkCmdBeginRendering(cmd, &renderingInfo);
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gpu.pipelines.get(pipeline)->pipeline);
 
+            VkBuffer vertexBuffers[] = {gpu.buffers.get(vertexBuffer)->buffer};
+            VkDeviceSize offsets[] = {0};
+            vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+
             VkViewport viewport = {
-                    .x = 0,
-                    .y = 0,
+                    .x = 0.f,
+                    .y = 0.f,
                     .width = static_cast<float>(gpu.swapchainExtent.width),
                     .height = static_cast<float>(gpu.swapchainExtent.height),
                     .minDepth = 0.f,
@@ -125,7 +158,9 @@ struct TriangleApp : Application {
     }
 
     void shutdown() override {
+        vkDeviceWaitIdle(gpu.device);
         gpu.destroyPipeline(pipeline);
+        gpu.destroyBuffer(vertexBuffer);
         gpu.shutdown();
         window.shutdown();
     }
@@ -135,6 +170,7 @@ struct TriangleApp : Application {
     Flare::ShaderCompiler shaderCompiler;
 
     Handle<Pipeline> pipeline;
+    Handle<Buffer> vertexBuffer;
 };
 
 int main() {

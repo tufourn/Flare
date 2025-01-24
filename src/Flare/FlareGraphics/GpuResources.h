@@ -6,6 +6,7 @@
 #include <vector>
 #include <span>
 #include <spdlog/spdlog.h>
+#include <vk_mem_alloc.h>
 
 namespace Flare {
     constexpr uint32_t invalidIndex = 0xFFFFFFFF;
@@ -175,5 +176,18 @@ namespace Flare {
         VkPipelineLayout pipelineLayout;
         VkPipelineBindPoint bindPoint;
         std::vector<Handle<DescriptorSetLayout>> descriptorSetLayoutHandles;
+    };
+
+    struct BufferCI {
+        size_t size = 0;
+        VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
+        bool mapped = false;
+        void *initialData = nullptr;
+    };
+
+    struct Buffer {
+        VkBuffer buffer;
+        VmaAllocation allocation;
+        VkBufferUsageFlags usageFlags;
     };
 }

@@ -50,6 +50,7 @@ namespace Flare {
         // Init resource pools;
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
         descriptorSetLayouts.init(gpuDeviceCI.resourcePoolCI.descriptorSetLayouts);
+        buffers.init(gpuDeviceCI.resourcePoolCI.buffers);
 
         // Instance
         if (volkInitialize() != VK_SUCCESS) {
@@ -880,8 +881,6 @@ namespace Flare {
             return;
         }
 
-        vkDeviceWaitIdle(device); //TODO: destroy stuff with a resource deletion queue
-
         Pipeline *pipeline = pipelines.get(handle);
 
         vkDestroyPipelineLayout(device, pipeline->pipelineLayout, nullptr);
@@ -1099,5 +1098,50 @@ namespace Flare {
         }
 
         return cmdBuf;
+    }
+
+    Handle<Buffer> GpuDevice::createBuffer(const BufferCI &ci) {
+        Handle<Buffer> handle = buffers.obtain();
+        if (!handle.isValid()) {
+            return handle;
+        }
+
+        Buffer *buffer = buffers.get(handle);
+
+        VkBufferCreateInfo bufferCI = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .size = ci.size,
+                .usage = ci.usageFlags,
+        };
+
+        VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
+
+        if (ci.mapped || ci.initialData) { // needs to map to copy initial data
+            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
+
+        vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation, nullptr);
+
+        if (ci.initialData) {
+            void* data;
+            vmaMapMemory(allocator, buffer->allocation, &data);
+            memcpy(data, ci.initialData, ci.size);
+            vmaUnmapMemory(allocator, buffer->allocation);
+        }
+
+        return handle;
+    }
+
+    void GpuDevice::destroyBuffer(Handle<Buffer> handle) {
+        if (!handle.isValid()) {
+            spdlog::error("Invalid buffer handle");
+            return;
+        }
+
+        Buffer *buffer = buffers.get(handle);
+
+        vmaDestroyBuffer(allocator, buffer->buffer, buffer->allocation);
     }
 }

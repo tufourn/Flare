@@ -18,6 +18,7 @@ namespace Flare {
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
         uint32_t descriptorSetLayouts = 256;
+        uint32_t buffers = 256;
     };
 
     struct GpuDeviceCreateInfo {
@@ -58,6 +59,10 @@ namespace Flare {
         Handle<DescriptorSetLayout> createDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo &ci);
 
         void destroyDescriptorSetLayout(Handle<DescriptorSetLayout> handle);
+
+        Handle<Buffer> createBuffer(const BufferCI &ci);
+
+        void destroyBuffer(Handle<Buffer> handle);
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
@@ -103,5 +108,6 @@ namespace Flare {
 
         ResourcePool<Pipeline> pipelines;
         ResourcePool<DescriptorSetLayout> descriptorSetLayouts;
+        ResourcePool<Buffer> buffers;
     };
 }
