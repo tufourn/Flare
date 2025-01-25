@@ -982,7 +982,8 @@ namespace Flare {
         VkResult acquireResult = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX,
                                                        *imageAcquiredSemaphore, VK_NULL_HANDLE, &swapchainImageIndex);
         if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
-            // todo: resize swapchain
+            resizeSwapchain();
+            resized = true;
         }
 
         vkResetCommandPool(device, commandPools[currentFrame], 0);
@@ -1072,6 +1073,12 @@ namespace Flare {
         };
 
         VkResult result = vkQueuePresentKHR(mainQueue, &presentInfo);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resized) {
+            resizeSwapchain();
+            resized = false;
+            advanceFrameCounter();
+            return;
+        }
 
         advanceFrameCounter();
     }
@@ -1143,5 +1150,18 @@ namespace Flare {
         Buffer *buffer = buffers.get(handle);
 
         vmaDestroyBuffer(allocator, buffer->buffer, buffer->allocation);
+    }
+
+    void GpuDevice::resizeSwapchain() {
+        vkDeviceWaitIdle(device);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCapabilities);
+        swapchainExtent = surfaceCapabilities.currentExtent;
+
+        if (swapchainExtent.width == 0 || swapchainExtent.height == 0) { // minimized
+            return;
+        }
+
+        destroySwapchain();
+        createSwapchain();
     }
 }

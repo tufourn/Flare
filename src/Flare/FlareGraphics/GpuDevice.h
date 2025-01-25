@@ -41,6 +41,8 @@ namespace Flare {
 
         void destroySwapchain();
 
+        void resizeSwapchain();
+
         void newFrame();
 
         void advanceFrameCounter();

@@ -89,71 +89,73 @@ struct TriangleApp : Application {
 
     void loop() override {
         while (!window.shouldClose()) {
-            spdlog::info("frame {}", gpu.absoluteFrame);
             window.pollEvents();
-            gpu.newFrame();
 
-            VkCommandBuffer cmd = gpu.getCommandBuffer();
-            VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-                                      VK_IMAGE_LAYOUT_UNDEFINED,
-                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            if (!window.isMinimized()) {
+                gpu.newFrame();
 
-            VkRenderingAttachmentInfo colorAttachment = {
-                    .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                    .pNext = nullptr,
-                    .imageView = gpu.swapchainImageViews[gpu.swapchainImageIndex],
-                    .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                    .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-                    .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            };
+                VkCommandBuffer cmd = gpu.getCommandBuffer();
+                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+                                          VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-            VkRenderingInfo renderingInfo = {
-                    .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .renderArea = {VkOffset2D{0, 0}, gpu.swapchainExtent},
-                    .layerCount = 1,
-                    .viewMask = 0,
-                    .colorAttachmentCount = 1,
-                    .pColorAttachments = &colorAttachment,
-                    .pDepthAttachment = nullptr,
-                    .pStencilAttachment = nullptr,
-            };
+                VkRenderingAttachmentInfo colorAttachment = {
+                        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                        .pNext = nullptr,
+                        .imageView = gpu.swapchainImageViews[gpu.swapchainImageIndex],
+                        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                };
 
-            vkCmdBeginRendering(cmd, &renderingInfo);
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gpu.pipelines.get(pipeline)->pipeline);
+                VkRenderingInfo renderingInfo = {
+                        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                        .pNext = nullptr,
+                        .flags = 0,
+                        .renderArea = {VkOffset2D{0, 0}, gpu.swapchainExtent},
+                        .layerCount = 1,
+                        .viewMask = 0,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = &colorAttachment,
+                        .pDepthAttachment = nullptr,
+                        .pStencilAttachment = nullptr,
+                };
 
-            VkBuffer vertexBuffers[] = {gpu.buffers.get(vertexBuffer)->buffer};
-            VkDeviceSize offsets[] = {0};
-            vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+                vkCmdBeginRendering(cmd, &renderingInfo);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gpu.pipelines.get(pipeline)->pipeline);
 
-            VkViewport viewport = {
-                    .x = 0.f,
-                    .y = 0.f,
-                    .width = static_cast<float>(gpu.swapchainExtent.width),
-                    .height = static_cast<float>(gpu.swapchainExtent.height),
-                    .minDepth = 0.f,
-                    .maxDepth = 1.f,
-            };
-            vkCmdSetViewport(cmd, 0, 1, &viewport);
+                VkBuffer vertexBuffers[] = {gpu.buffers.get(vertexBuffer)->buffer};
+                VkDeviceSize offsets[] = {0};
+                vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
 
-            VkRect2D scissor = {
-                    .offset = {0, 0},
-                    .extent = gpu.swapchainExtent,
-            };
-            vkCmdSetScissor(cmd, 0, 1, &scissor);
+                VkViewport viewport = {
+                        .x = 0.f,
+                        .y = 0.f,
+                        .width = static_cast<float>(gpu.swapchainExtent.width),
+                        .height = static_cast<float>(gpu.swapchainExtent.height),
+                        .minDepth = 0.f,
+                        .maxDepth = 1.f,
+                };
+                vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-            vkCmdDraw(cmd, 3, 1, 0, 0);
+                VkRect2D scissor = {
+                        .offset = {0, 0},
+                        .extent = gpu.swapchainExtent,
+                };
+                vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-            vkCmdEndRendering(cmd);
+                vkCmdDraw(cmd, 3, 1, 0, 0);
 
-            VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+                vkCmdEndRendering(cmd);
 
-            vkEndCommandBuffer(cmd);
+                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
-            gpu.present();
+                vkEndCommandBuffer(cmd);
+
+                gpu.present();
+            }
         }
     }
 
