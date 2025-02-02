@@ -16,6 +16,8 @@ namespace Flare {
         uint32_t index = invalidIndex;
 
         bool isValid() const { return index != invalidIndex; }
+
+        void invalidate() { index = invalidIndex; }
     };
 
     template<typename T>
@@ -158,8 +160,14 @@ namespace Flare {
         VkFormat stencilFormat = VK_FORMAT_UNDEFINED;
     };
 
+    struct DescriptorSetLayoutCI {
+        VkDescriptorSetLayoutBinding *bindings = nullptr;
+        size_t bindingCount = 0;
+    };
+
     struct DescriptorSetLayout {
         VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
+        std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings;
     };
 
     struct PipelineCI {
@@ -188,6 +196,66 @@ namespace Flare {
     struct Buffer {
         VkBuffer buffer;
         VmaAllocation allocation;
-        VkBufferUsageFlags usageFlags;
+        VmaAllocationInfo allocationInfo;
+        size_t size;
+    };
+
+    struct TextureCI {
+        void *initialData = nullptr;
+        uint16_t width = 1;
+        uint16_t height = 1;
+        uint16_t depth = 1;
+        uint16_t mipCount = 1;
+        uint16_t layerCount = 1;
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        VkImageType type = VK_IMAGE_TYPE_MAX_ENUM;
+        VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+    };
+
+    struct Texture {
+        VkImage image;
+        VkImageView imageView;
+        VkFormat format;
+        VmaAllocation allocation;
+
+        uint16_t width;
+        uint16_t height;
+        uint16_t depth;
+    };
+
+    struct SamplerCI {
+        VkFilter minFilter = VK_FILTER_NEAREST;
+        VkFilter magFilter = VK_FILTER_NEAREST;
+        VkSamplerMipmapMode mipFilter = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+        VkSamplerAddressMode u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        VkSamplerAddressMode v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        VkSamplerAddressMode w = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    };
+
+    struct Sampler {
+        VkSampler sampler;
+    };
+
+    struct DescriptorSetCI {
+        Handle<DescriptorSetLayout> layout;
+
+        uint32_t resourceCount;
+
+        std::vector<Handle<Texture>> textures;
+        std::vector<Handle<Sampler>> samplers;
+        std::vector<Handle<Buffer>> buffers;
+        std::vector<uint32_t> bindings;
+
+        DescriptorSetCI &addBuffer(Handle<Buffer> handle, uint32_t binding);
+
+        DescriptorSetCI &addTexture(Handle<Texture> handle, uint32_t binding);
+
+        DescriptorSetCI &addTextureSampler(Handle<Texture> textureHandle, Handle<Sampler> samplerHandle,
+                                           uint32_t binding);
+    };
+
+    struct DescriptorSet {
+        VkDescriptorSet descriptorSet;
     };
 }

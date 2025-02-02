@@ -47,4 +47,32 @@ namespace Flare {
         shaderBinaries.push_back(binary);
         return *this;
     }
+
+    DescriptorSetCI &DescriptorSetCI::addBuffer(Handle<Buffer> handle, uint32_t binding) {
+        samplers.emplace_back();
+        textures.emplace_back();
+        buffers.emplace_back(handle);
+        bindings.emplace_back(binding);
+        resourceCount++;
+        return *this;
+    }
+
+    DescriptorSetCI &DescriptorSetCI::addTexture(Handle<Texture> handle, uint32_t binding) {
+        samplers.emplace_back();
+        textures.emplace_back(handle);
+        buffers.emplace_back();
+        bindings.emplace_back(binding);
+        resourceCount++;
+        return *this;
+    }
+
+    DescriptorSetCI &DescriptorSetCI::addTextureSampler(Handle<Texture> textureHandle, Handle<Sampler> samplerHandle,
+                                                        uint32_t binding) {
+        samplers.emplace_back(samplerHandle);
+        textures.emplace_back(textureHandle);
+        buffers.emplace_back();
+        bindings.emplace_back(binding);
+        resourceCount++;
+        return *this;
+    }
 }

@@ -2,6 +2,7 @@
 
 #define GLFW_INCLUDE_NONE
 #define VK_NO_PROTOTYPES
+#define CGLTF_IMPLEMENTATION
 
 #include <volk.h>
 #include <GLFW/glfw3.h>
@@ -9,6 +10,10 @@
 #include <optional>
 #include <algorithm>
 #include <spirv_cross.hpp>
+#include <cgltf.h>
+#include <stb_image.h>
+
+#include "VkHelper.h"
 
 namespace Flare {
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -51,6 +56,9 @@ namespace Flare {
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
         descriptorSetLayouts.init(gpuDeviceCI.resourcePoolCI.descriptorSetLayouts);
         buffers.init(gpuDeviceCI.resourcePoolCI.buffers);
+        textures.init(gpuDeviceCI.resourcePoolCI.textures);
+        samplers.init(gpuDeviceCI.resourcePoolCI.samplers);
+        descriptorSets.init(gpuDeviceCI.resourcePoolCI.descriptorSets);
 
         // Instance
         if (volkInitialize() != VK_SUCCESS) {
@@ -454,10 +462,45 @@ namespace Flare {
                 spdlog::error("Failed to allocated command buffer");
             }
         }
+
+        SamplerCI defaultSamplerCI = {};
+        defaultSampler = createSampler(defaultSamplerCI);
+
+        const uint32_t globalPoolElements = 128;
+        std::vector<VkDescriptorPoolSize> poolSizes = {
+                {VK_DESCRIPTOR_TYPE_SAMPLER,                globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, globalPoolElements},
+                {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       globalPoolElements}
+        };
+
+        VkDescriptorPoolCreateInfo poolCI = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .maxSets = gpuDeviceCI.resourcePoolCI.descriptorSets,
+                .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+                .pPoolSizes = poolSizes.data(),
+        };
+
+        if (vkCreateDescriptorPool(device, &poolCI, nullptr, &descriptorPool) != VK_SUCCESS) {
+            spdlog::error("Failed to create descriptor pool");
+        }
     }
 
     void GpuDevice::shutdown() {
         vkDeviceWaitIdle(device);
+
+        destroySampler(defaultSampler);
+
+        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
         for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
             vkDestroyCommandPool(device, commandPools[i], nullptr);
@@ -586,19 +629,8 @@ namespace Flare {
                     .image = swapchainImages[i],
                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
                     .format = surfaceFormat.format,
-                    .components = {
-                            .r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                            .a = VK_COMPONENT_SWIZZLE_IDENTITY,
-                    },
-                    .subresourceRange = {
-                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .baseMipLevel = 0,
-                            .levelCount = 1,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                    }
+                    .components = VkHelper::identityRGBA(),
+                    .subresourceRange = VkHelper::subresourceRange(),
             };
 
             if (vkCreateImageView(device, &imageViewCI, nullptr, &swapchainImageViews[i]) != VK_SUCCESS) {
@@ -659,16 +691,13 @@ namespace Flare {
         std::vector<VkDescriptorSetLayout> pipelineSetLayouts;
         pipelineSetLayouts.reserve(reflectOutput.getSetCount());
 
-        for (const auto &set: reflectOutput.descriptorSets) {
+        for (auto &set: reflectOutput.descriptorSets) {
             uint32_t setIndex = set.first;
-            const std::vector<VkDescriptorSetLayoutBinding> *bindings = &set.second;
+            std::vector<VkDescriptorSetLayoutBinding> *bindings = &set.second;
 
-            VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {
-                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                    .pNext = nullptr,
-                    .flags = 0,
-                    .bindingCount = static_cast<uint32_t>(bindings->size()),
-                    .pBindings = bindings->data()
+            DescriptorSetLayoutCI descriptorSetLayoutCI = {
+                    .bindings = bindings->data(),
+                    .bindingCount = bindings->size(),
             };
 
             Handle<DescriptorSetLayout> descriptorSetLayoutHandle = createDescriptorSetLayout(descriptorSetLayoutCI);
@@ -936,15 +965,30 @@ namespace Flare {
         }
     }
 
-    Handle<DescriptorSetLayout> GpuDevice::createDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo &ci) {
+    Handle<DescriptorSetLayout> GpuDevice::createDescriptorSetLayout(const DescriptorSetLayoutCI &ci) {
         Handle<DescriptorSetLayout> handle = descriptorSetLayouts.obtain();
         if (!handle.isValid()) {
             return handle;
         }
 
         DescriptorSetLayout *layout = descriptorSetLayouts.get(handle);
-        if (vkCreateDescriptorSetLayout(device, &ci, nullptr, &layout->descriptorSetLayout) != VK_SUCCESS) {
+
+        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .bindingCount = static_cast<uint32_t>(ci.bindingCount),
+                .pBindings = ci.bindings,
+        };
+
+        if (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCI, nullptr,
+                                        &layout->descriptorSetLayout) != VK_SUCCESS) {
             spdlog::error("Failed to create descriptor set layout");
+        }
+
+        for (size_t i = 0; i < ci.bindingCount; i++) {
+            assert(!layout->bindings.contains(ci.bindings[i].binding));
+            layout->bindings.insert({ci.bindings[i].binding, ci.bindings[i]});
         }
 
         return handle;
@@ -1129,14 +1173,16 @@ namespace Flare {
             allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
-        vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation, nullptr);
+        vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation, &buffer->allocationInfo);
 
         if (ci.initialData) {
-            void* data;
+            void *data;
             vmaMapMemory(allocator, buffer->allocation, &data);
             memcpy(data, ci.initialData, ci.size);
             vmaUnmapMemory(allocator, buffer->allocation);
         }
+
+        buffer->size = ci.size;
 
         return handle;
     }
@@ -1163,5 +1209,258 @@ namespace Flare {
 
         destroySwapchain();
         createSwapchain();
+    }
+
+    //todo
+    void GpuDevice::createSceneFromGltf(Scene &scene, const std::filesystem::path &path) {
+        std::filesystem::path directory = path.parent_path();
+
+        cgltf_options options = {};
+        cgltf_data *data = nullptr;
+        cgltf_result result = cgltf_parse_file(&options, path.string().c_str(), &data);
+        if (result != cgltf_result_success) {
+            spdlog::error("Failed to load gltf file {}", path.string());
+            return;
+        }
+        cgltf_load_buffers(&options, data, path.string().c_str());
+
+        for (size_t i = 0; i < data->images_count; i++) {
+            const cgltf_image *cgltfImage = &data->images[i];
+            const char *uri = cgltfImage->uri;
+
+            int width, height, channelCount;
+
+            if (uri) {
+                if (strncmp(uri, "data:", 5) == 0) {
+                    // embedded image base64
+                    const char *comma = strchr(uri, ',');
+                    if (comma && comma - uri >= 7 && strncmp(comma - 7, ";base64", 7) == 0) {
+                        const char *base64 = comma + 1;
+                        const size_t base64Size = strlen(base64);
+                        size_t decodedBinarySize = base64Size - base64Size / 4;
+
+                        if (base64Size >= 2) {
+                            decodedBinarySize -= base64[base64Size - 1] == '=';
+                            decodedBinarySize -= base64[base64Size - 2] == '=';
+                        }
+
+                        void *imageData = nullptr;
+                        cgltf_options base64Options = {};
+
+                        if (cgltf_load_buffer_base64(&base64Options, decodedBinarySize, base64, &imageData) !=
+                            cgltf_result_success) {
+                            spdlog::error("Failed to parse base64 image uri");
+                        } else {
+                            unsigned char *stbData = stbi_load_from_memory(
+                                    static_cast<const unsigned char *>(imageData),
+                                    static_cast<int>(decodedBinarySize),
+                                    &width, &height, &channelCount, STBI_rgb_alpha);
+
+                            TextureCI textureCI = {
+                                    .initialData = stbData,
+                                    .width = static_cast<uint16_t>(width),
+                                    .height = static_cast<uint16_t>(height),
+                                    .type = VK_IMAGE_TYPE_2D,
+                            };
+
+                            stbi_image_free(stbData);
+                            free(imageData);
+                        }
+                    } else {
+                        spdlog::error("Invalid embedded image uri");
+                    }
+                } else {
+                    // image file
+
+                }
+            } else {
+                // image from buffer
+            }
+        }
+
+        cgltf_free(data);
+    }
+
+    Handle<Texture> GpuDevice::createTexture(const TextureCI &ci) {
+        Handle<Texture> handle = textures.obtain();
+        if (!handle.isValid()) {
+            return handle;
+        }
+
+        Texture *texture = textures.get(handle);
+
+        texture->width = ci.width;
+        texture->height = ci.height;
+        texture->depth = ci.depth;
+        texture->format = ci.format;
+
+        VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+        if (ci.format == VK_FORMAT_D32_SFLOAT) {
+            usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        } else {
+            usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        }
+
+        VkImageCreateInfo imageCI = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .imageType = ci.type,
+                .format = ci.format,
+                .extent = {
+                        .width = ci.width,
+                        .height = ci.height,
+                        .depth = ci.depth,
+                },
+                .mipLevels = ci.mipCount,
+                .arrayLayers = ci.layerCount,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .tiling = VK_IMAGE_TILING_OPTIMAL,
+                .usage = usage,
+                .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        };
+
+        VmaAllocationCreateInfo allocCI = {
+                .usage = VMA_MEMORY_USAGE_AUTO,
+        };
+
+        vmaCreateImage(allocator, &imageCI, &allocCI, &texture->image, &texture->allocation, nullptr);
+
+        VkImageViewCreateInfo imageViewCI = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .image = texture->image,
+                .viewType = ci.viewType,
+                .format = ci.format,
+                .components = VkHelper::identityRGBA(),
+                .subresourceRange = VkHelper::subresourceRange(ci.format == VK_FORMAT_D32_SFLOAT),
+        };
+
+        vkCreateImageView(device, &imageViewCI, nullptr, &texture->imageView);
+
+        return handle;
+    }
+
+    void GpuDevice::destroyTexture(Handle<Texture> handle) {
+        if (!handle.isValid()) {
+            spdlog::error("Invalid texture handle");
+            return;
+        }
+
+        Texture *texture = textures.get(handle);
+
+        vkDestroyImageView(device, texture->imageView, nullptr);
+        vmaDestroyImage(allocator, texture->image, texture->allocation);
+    }
+
+    Handle<DescriptorSet> GpuDevice::createDescriptorSet(const DescriptorSetCI &ci) {
+        Handle<DescriptorSet> handle = descriptorSets.obtain();
+        if (!handle.isValid()) {
+            return handle;
+        }
+
+        DescriptorSet *descriptorSet = descriptorSets.get(handle);
+
+        DescriptorSetLayout *layout = descriptorSetLayouts.get(ci.layout);
+
+        VkDescriptorSetAllocateInfo allocInfo = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .descriptorPool = descriptorPool,
+                .descriptorSetCount = 1,
+                .pSetLayouts = &layout->descriptorSetLayout,
+        };
+
+        if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet->descriptorSet) != VK_SUCCESS) {
+            spdlog::error("Failed to allocate descriptors set");
+        }
+
+        std::vector<VkWriteDescriptorSet> writeDescSets(ci.resourceCount);
+        std::vector<VkDescriptorBufferInfo> bufferInfos(ci.resourceCount);
+        std::vector<VkDescriptorImageInfo> imageInfos(ci.resourceCount);
+
+        for (size_t i = 0; i < ci.resourceCount; i++) {
+            VkDescriptorSetLayoutBinding layoutBinding = layout->bindings.at(ci.bindings[i]);
+
+            switch (layoutBinding.descriptorType) {
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
+                    Handle<Buffer> bufferHandle = ci.buffers[i];
+                    Buffer* buffer = buffers.get(bufferHandle);
+
+                    bufferInfos[i] = {
+                            .buffer = buffer->buffer,
+                            .offset = 0,
+                            .range = buffer->size,
+                    };
+
+                    writeDescSets[i] = {
+                            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            .pNext = nullptr,
+                            .dstSet = descriptorSet->descriptorSet,
+                            .dstBinding = layoutBinding.binding,
+                            .dstArrayElement = 0,
+                            .descriptorCount = 1,
+                            .descriptorType = layoutBinding.descriptorType,
+                            .pImageInfo = nullptr,
+                            .pBufferInfo = &bufferInfos[i],
+                            .pTexelBufferView = nullptr,
+                    };
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        vkUpdateDescriptorSets(device, ci.resourceCount, writeDescSets.data(), 0, nullptr);
+
+        return handle;
+    }
+
+    Handle<Sampler> GpuDevice::createSampler(const SamplerCI &ci) {
+        Handle<Sampler> handle = samplers.obtain();
+        if (!handle.isValid()) {
+            return handle;
+        }
+
+        Sampler *sampler = samplers.get(handle);
+
+        VkSamplerCreateInfo samplerCI = {
+                .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .magFilter = ci.magFilter,
+                .minFilter = ci.minFilter,
+                .mipmapMode = ci.mipFilter,
+                .addressModeU = ci.u,
+                .addressModeV = ci.v,
+                .addressModeW = ci.w,
+//                .mipLodBias;
+//                .anisotropyEnable;
+//                .maxAnisotropy;
+//                .compareEnable;
+//                .compareOp;
+//                .minLod;
+//                .maxLod;
+//                .borderColor;
+//                .unnormalizedCoordinates;
+        };
+
+        vkCreateSampler(device, &samplerCI, nullptr, &sampler->sampler);
+
+        return handle;
+    }
+
+    void GpuDevice::destroySampler(Handle<Sampler> handle) {
+        if (!handle.isValid()) {
+            spdlog::error("Invalid sampler handle");
+            return;
+        }
+
+        Sampler *sampler = samplers.get(handle);
+
+        vkDestroySampler(device, sampler->sampler, nullptr);
     }
 }

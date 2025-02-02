@@ -5,6 +5,8 @@
 #include <glm/glm.hpp>
 
 #include "FlareGraphics/VkHelper.h"
+#include "FlareGraphics/AsyncLoader.h"
+#include "glm/ext/matrix_transform.hpp"
 
 using namespace Flare;
 
@@ -20,6 +22,12 @@ struct TriangleApp : Application {
             {{-0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}}
     };
 
+    struct Uniform {
+        glm::mat4 mvp = glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(0.0f, 0.0f, 1.0f));
+    };
+
+    const Uniform uniform = {};
+
     void init(const ApplicationConfig &appConfig) override {
         WindowConfig windowConfig{};
         windowConfig
@@ -34,11 +42,13 @@ struct TriangleApp : Application {
         };
 
         gpu.init(gpuDeviceCI);
+        asyncLoader.init(gpu);
+
         shaderCompiler.init();
 
-//        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/shaders.slang");
+        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/shaders.slang");
 //        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_hardcode.slang");
-        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_vertexbuffer.slang");
+//        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_vertexbuffer.slang");
 
         Flare::ReflectOutput reflection;
         std::vector<ShaderExecModel> execModels = {
@@ -74,17 +84,66 @@ struct TriangleApp : Application {
                         }
                 );
 
-        pipeline = gpu.createPipeline(pipelineCI);
+        pipelineHandle = gpu.createPipeline(pipelineCI);
 
         BufferCI vertexBufferCI = {
                 .size = sizeof(Vertex) * vertices.size(),
-                .usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                .mapped = true,
-                .initialData = (void *) vertices.data(),
+                .usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         };
 
-        vertexBuffer = gpu.createBuffer(vertexBufferCI);
+        vertexBufferHandle = gpu.createBuffer(vertexBufferCI);
 
+        BufferCI uniformBufferCI = {
+                .size = sizeof(Uniform),
+                .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        };
+
+        uniformBufferHandle = gpu.createBuffer(uniformBufferCI);
+
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = vertexBufferHandle,
+                        .data = (void *) vertices.data(),
+                }
+        );
+
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = uniformBufferHandle,
+                        .data = (void *) &uniform,
+                }
+        );
+
+        Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
+
+        DescriptorSetCI descSetCI = {
+                .layout = pipeline->descriptorSetLayoutHandles[0],
+        };
+
+        descSetCI.addBuffer(uniformBufferHandle, 0);
+
+        descriptorSetHandle = gpu.createDescriptorSet(descSetCI);
+
+        const char *texturePath = "uv1.png";
+        int width, height, components;
+        stbi_info(texturePath, &width, &height, &components);
+
+        TextureCI textureCI = {
+                .width = static_cast<uint16_t>(width),
+                .height = static_cast<uint16_t>(height),
+                .depth = 1,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        };
+
+        textureHandle = gpu.createTexture(textureCI);
+        asyncLoader.fileRequests.emplace_back(
+                FileRequest{
+                        .path = texturePath,
+                        .texture = textureHandle,
+                }
+        );
     }
 
     void loop() override {
@@ -92,6 +151,8 @@ struct TriangleApp : Application {
             window.pollEvents();
 
             if (!window.isMinimized()) {
+                asyncLoader.update();
+
                 gpu.newFrame();
 
                 VkCommandBuffer cmd = gpu.getCommandBuffer();
@@ -121,12 +182,20 @@ struct TriangleApp : Application {
                         .pStencilAttachment = nullptr,
                 };
 
-                vkCmdBeginRendering(cmd, &renderingInfo);
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, gpu.pipelines.get(pipeline)->pipeline);
+                Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
 
-                VkBuffer vertexBuffers[] = {gpu.buffers.get(vertexBuffer)->buffer};
+                vkCmdBeginRendering(cmd, &renderingInfo);
+                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+
+                VkBuffer vertexBuffers[] = {gpu.buffers.get(vertexBufferHandle)->buffer};
                 VkDeviceSize offsets[] = {0};
                 vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+
+                DescriptorSet *descSet = gpu.descriptorSets.get(descriptorSetHandle);
+                VkDescriptorSet vkDescSet = descSet->descriptorSet;
+
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipelineLayout, 0, 1,
+                                        &vkDescSet, 0, nullptr);
 
                 VkViewport viewport = {
                         .x = 0.f,
@@ -161,8 +230,14 @@ struct TriangleApp : Application {
 
     void shutdown() override {
         vkDeviceWaitIdle(gpu.device);
-        gpu.destroyPipeline(pipeline);
-        gpu.destroyBuffer(vertexBuffer);
+
+        gpu.destroyPipeline(pipelineHandle);
+        gpu.destroyBuffer(vertexBufferHandle);
+        gpu.destroyBuffer(uniformBufferHandle);
+
+        gpu.destroyTexture(textureHandle);
+
+        asyncLoader.shutdown();
         gpu.shutdown();
         window.shutdown();
     }
@@ -170,9 +245,13 @@ struct TriangleApp : Application {
     Flare::GpuDevice gpu;
     Flare::Window window;
     Flare::ShaderCompiler shaderCompiler;
+    Flare::AsyncLoader asyncLoader;
 
-    Handle<Pipeline> pipeline;
-    Handle<Buffer> vertexBuffer;
+    Handle<Pipeline> pipelineHandle;
+    Handle<Buffer> vertexBufferHandle;
+    Handle<Buffer> uniformBufferHandle;
+    Handle<Texture> textureHandle;
+    Handle<DescriptorSet> descriptorSetHandle;
 };
 
 int main() {

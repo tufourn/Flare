@@ -40,7 +40,7 @@ struct VertexStageOutput
 };
 
 [shader("vertex")]
-VertexStageOutput vertexMain(
+VertexStageOutput main(
     AssembledVertex assembledVertex)
 {
     VertexStageOutput output;
@@ -57,7 +57,7 @@ VertexStageOutput vertexMain(
 // Fragment Shader
 
 [shader("fragment")]
-Fragment fragmentMain(
+Fragment main(
     CoarseVertex coarseVertex : CoarseVertex) : SV_Target
 {
     float3 color = coarseVertex.color;

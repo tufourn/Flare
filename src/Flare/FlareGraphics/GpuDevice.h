@@ -9,6 +9,7 @@
 #include <array>
 
 #include "GpuResources.h"
+#include "Scene.h"
 
 struct GLFWwindow;
 
@@ -19,6 +20,9 @@ namespace Flare {
         uint32_t pipelines = 256;
         uint32_t descriptorSetLayouts = 256;
         uint32_t buffers = 256;
+        uint32_t textures = 256;
+        uint32_t samplers = 256;
+        uint32_t descriptorSets = 4096;
     };
 
     struct GpuDeviceCreateInfo {
@@ -58,13 +62,25 @@ namespace Flare {
 
         void destroyPipeline(Handle<Pipeline> handle);
 
-        Handle<DescriptorSetLayout> createDescriptorSetLayout(const VkDescriptorSetLayoutCreateInfo &ci);
+        Handle<DescriptorSetLayout> createDescriptorSetLayout(const DescriptorSetLayoutCI &ci);
 
         void destroyDescriptorSetLayout(Handle<DescriptorSetLayout> handle);
 
         Handle<Buffer> createBuffer(const BufferCI &ci);
 
         void destroyBuffer(Handle<Buffer> handle);
+
+        Handle<Texture> createTexture(const TextureCI &ci);
+
+        void destroyTexture(Handle<Texture> handle);
+
+        Handle<Sampler> createSampler(const SamplerCI &ci);
+
+        void destroySampler(Handle<Sampler> handle);
+
+        Handle<DescriptorSet> createDescriptorSet(const DescriptorSetCI &ci);
+
+        void createSceneFromGltf(Scene &scene, const std::filesystem::path &path);
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
@@ -108,8 +124,15 @@ namespace Flare {
 
         VmaAllocator allocator;
 
+        VkDescriptorPool descriptorPool;
+
+        Handle<Sampler> defaultSampler;
+
         ResourcePool<Pipeline> pipelines;
         ResourcePool<DescriptorSetLayout> descriptorSetLayouts;
         ResourcePool<Buffer> buffers;
+        ResourcePool<Texture> textures;
+        ResourcePool<Sampler> samplers;
+        ResourcePool<DescriptorSet> descriptorSets;
     };
 }

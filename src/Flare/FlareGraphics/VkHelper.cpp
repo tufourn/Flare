@@ -33,4 +33,24 @@ namespace VkHelper {
 
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
+
+    VkComponentMapping identityRGBA() {
+        return {
+                .r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                .a = VK_COMPONENT_SWIZZLE_IDENTITY,
+        };
+    }
+
+    VkImageSubresourceRange subresourceRange(bool depth) {
+        return {
+                .aspectMask = static_cast<VkImageAspectFlags>(depth ? VK_IMAGE_ASPECT_DEPTH_BIT
+                                                                    : VK_IMAGE_ASPECT_COLOR_BIT),
+                .baseMipLevel = 0,
+                .levelCount = VK_REMAINING_MIP_LEVELS,
+                .baseArrayLayer = 0,
+                .layerCount = VK_REMAINING_ARRAY_LAYERS
+        };
+    }
 }
