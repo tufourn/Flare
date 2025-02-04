@@ -37,7 +37,7 @@ namespace Flare {
         vkCreateFence(gpu->device, &fenceCI, nullptr, &transferFence);
 
         BufferCI stagingBufferCI = {
-                .size = STAGING_BUFFER_SIZE_MB * 1024 * 1024, // MB
+                .size = STAGING_BUFFER_SIZE_MB * 1024 * 1024,
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 .mapped = true,
         };
@@ -57,6 +57,21 @@ namespace Flare {
     }
 
     void AsyncLoader::update() {
+        if (!fileRequests.empty()) {
+            FileRequest fileRequest = fileRequests.back();
+            fileRequests.pop_back();
+
+            int width, height, component;
+            unsigned char *stbData = stbi_load(fileRequest.path.string().c_str(),
+                                               &width, &height, &component, STBI_rgb_alpha);
+            uploadRequests.emplace_back(
+                    UploadRequest{
+                            .texture = fileRequest.texture,
+                            .data = stbData,
+                    }
+            );
+        }
+
         if (!uploadRequests.empty()) {
             if (vkGetFenceStatus(gpu->device, transferFence) != VK_SUCCESS) {
                 return;
@@ -185,6 +200,17 @@ namespace Flare {
                 vkCmdPipelineBarrier2(cmd, &postCopyDep);
 
                 free(request.data);
+            } else if (request.srcBuffer.isValid() && request.dstBuffer.isValid()) {
+                Buffer* srcBuffer = gpu->buffers.get(request.srcBuffer);
+                Buffer* dstBuffer = gpu->buffers.get(request.dstBuffer);
+
+                VkBufferCopy region = {
+                        .srcOffset = 0,
+                        .dstOffset = 0,
+                        .size = srcBuffer->size,
+                };
+
+                vkCmdCopyBuffer(cmd, srcBuffer->buffer, dstBuffer->buffer, 1, &region);
             } else if (request.dstBuffer.isValid()) {
                 Buffer *dstBuffer = gpu->buffers.get(request.dstBuffer);
 
@@ -256,21 +282,11 @@ namespace Flare {
             };
 
             vkQueueSubmit2(gpu->transferQueue, 1, &submitInfo, transferFence);
-        }
 
-        if (!fileRequests.empty()) {
-            FileRequest fileRequest = fileRequests.back();
-            fileRequests.pop_back();
-
-            int width, height, component;
-            unsigned char *stbData = stbi_load(fileRequest.path.string().c_str(),
-                                               &width, &height, &component, STBI_rgb_alpha);
-            uploadRequests.emplace_back(
-                    UploadRequest{
-                            .texture = fileRequest.texture,
-                            .data = stbData,
-                    }
-            );
+            if (request.texture.isValid()) {
+                std::lock_guard<std::mutex> lock(textureMutex);
+                pendingTextures.push_back(request.texture);
+            }
         }
 
         stagingBufferOffset = 0;
@@ -279,5 +295,50 @@ namespace Flare {
     size_t AsyncLoader::memoryAlign(size_t size, size_t alignment) {
         const size_t alignmentMask = alignment - 1;
         return (size + alignmentMask) & ~alignmentMask;
+    }
+
+    void AsyncLoader::signalTextures(VkCommandBuffer cmd) {
+        std::lock_guard<std::mutex> lock(textureMutex);
+
+        if (pendingTextures.empty()) {
+            return;
+        }
+
+        for (const auto& handle : pendingTextures) {
+            Texture* texture = gpu->textures.get(handle);
+
+            VkImageMemoryBarrier2 barrier = {
+                    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .dstAccessMask = 0,
+                    .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    .srcQueueFamilyIndex = gpu->transferFamily,
+                    .dstQueueFamilyIndex = gpu->mainFamily,
+                    .image = texture->image,
+                    .subresourceRange = {
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .baseMipLevel = 0,
+                            .levelCount = VK_REMAINING_MIP_LEVELS,
+                            .baseArrayLayer = 0,
+                            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+                    }
+            };
+
+            VkDependencyInfo postCopyDep = {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .imageMemoryBarrierCount = 1,
+                    .pImageMemoryBarriers = &barrier,
+            };
+
+            vkCmdPipelineBarrier2(cmd, &postCopyDep);
+        }
+
+        pendingTextures.clear();
     }
 }

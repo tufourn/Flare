@@ -75,4 +75,13 @@ namespace Flare {
         resourceCount++;
         return *this;
     }
+
+    DescriptorSetCI &DescriptorSetCI::addSampler(Handle<Sampler> handle, uint32_t binding) {
+        samplers.emplace_back(handle);
+        textures.emplace_back();
+        buffers.emplace_back();
+        bindings.emplace_back(binding);
+        resourceCount++;
+        return *this;
+    }
 }

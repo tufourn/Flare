@@ -165,3 +165,4 @@ target_compile_definitions(FlareGraphics PRIVATE
 include(cmake/CopyAssets.cmake)
 
 add_subdirectory(src/01-triangle)
+add_subdirectory(src/02-textured-triangle)

@@ -8,7 +8,7 @@ namespace Flare {
         Handle<Texture> texture;
         Handle<Buffer> dstBuffer;
         Handle<Buffer> srcBuffer;
-        void* data = nullptr;
+        void *data = nullptr;
     };
 
     struct FileRequest {
@@ -17,7 +17,7 @@ namespace Flare {
     };
 
     struct AsyncLoader {
-        GpuDevice* gpu;
+        GpuDevice *gpu;
 
         std::array<VkCommandPool, FRAMES_IN_FLIGHT> commandPools;
         std::array<VkCommandBuffer, FRAMES_IN_FLIGHT> commandBuffers;
@@ -30,11 +30,16 @@ namespace Flare {
         std::vector<UploadRequest> uploadRequests;
         std::vector<FileRequest> fileRequests;
 
-        Handle<Texture> loadedTexture;
+        std::mutex textureMutex;
+        std::vector<Handle<Texture>> pendingTextures;
 
-        void init(GpuDevice& gpuDevice);
+        void init(GpuDevice &gpuDevice);
+
         void shutdown();
+
         void update();
+
+        void signalTextures(VkCommandBuffer cmd);
 
         size_t memoryAlign(size_t size, size_t alignment);
     };

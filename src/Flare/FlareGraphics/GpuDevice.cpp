@@ -962,6 +962,24 @@ namespace Flare {
                              stageString, uniform.name, set, binding);
                 reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, model.stage);
             }
+
+            for (auto &image: res.separate_images) {
+                uint32_t set = comp.get_decoration(image.id, spv::DecorationDescriptorSet);
+                uint32_t binding = comp.get_decoration(image.id, spv::DecorationBinding);
+
+                spdlog::info("{} shader: Found sampled image {} at set = {}, binding = {}",
+                             stageString, image.name, set, binding);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, model.stage);
+            }
+
+            for (auto &sampler: res.separate_samplers) {
+                uint32_t set = comp.get_decoration(sampler.id, spv::DecorationDescriptorSet);
+                uint32_t binding = comp.get_decoration(sampler.id, spv::DecorationBinding);
+
+                spdlog::info("{} shader: Found sampler {} at set = {}, binding = {}",
+                             stageString, sampler.name, set, binding);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_SAMPLER, model.stage);
+            }
         }
     }
 
@@ -1387,7 +1405,7 @@ namespace Flare {
             switch (layoutBinding.descriptorType) {
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
                     Handle<Buffer> bufferHandle = ci.buffers[i];
-                    Buffer* buffer = buffers.get(bufferHandle);
+                    Buffer *buffer = buffers.get(bufferHandle);
 
                     bufferInfos[i] = {
                             .buffer = buffer->buffer,
@@ -1405,6 +1423,54 @@ namespace Flare {
                             .descriptorType = layoutBinding.descriptorType,
                             .pImageInfo = nullptr,
                             .pBufferInfo = &bufferInfos[i],
+                            .pTexelBufferView = nullptr,
+                    };
+                    break;
+                }
+                case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
+                    Handle<Texture> textureHandle = ci.textures[i];
+                    Texture *texture = textures.get(textureHandle);
+
+                    imageInfos[i] = {
+                            .sampler = nullptr,
+                            .imageView = texture->imageView,
+                            .imageLayout = texture->format == VK_FORMAT_D32_SFLOAT ?
+                                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL :
+                                           VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                    };
+
+                    writeDescSets[i] = {
+                            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            .pNext = nullptr,
+                            .dstSet = descriptorSet->descriptorSet,
+                            .dstBinding = layoutBinding.binding,
+                            .dstArrayElement = 0,
+                            .descriptorCount = 1,
+                            .descriptorType = layoutBinding.descriptorType,
+                            .pImageInfo = &imageInfos[i],
+                            .pBufferInfo = nullptr,
+                            .pTexelBufferView = nullptr,
+                    };
+                    break;
+                }
+                case VK_DESCRIPTOR_TYPE_SAMPLER: {
+                    Handle<Sampler> samplerHandle = ci.samplers[i];
+                    Sampler *sampler = samplers.get(samplerHandle);
+
+                    imageInfos[i] = {
+                            .sampler = sampler->sampler,
+                    };
+
+                    writeDescSets[i] = {
+                            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                            .pNext = nullptr,
+                            .dstSet = descriptorSet->descriptorSet,
+                            .dstBinding = layoutBinding.binding,
+                            .dstArrayElement = 0,
+                            .descriptorCount = 1,
+                            .descriptorType = layoutBinding.descriptorType,
+                            .pImageInfo = &imageInfos[i],
+                            .pBufferInfo = nullptr,
                             .pTexelBufferView = nullptr,
                     };
                     break;

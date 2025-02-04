@@ -251,6 +251,8 @@ namespace Flare {
 
         DescriptorSetCI &addTexture(Handle<Texture> handle, uint32_t binding);
 
+        DescriptorSetCI &addSampler(Handle<Sampler> handle, uint32_t binding);
+
         DescriptorSetCI &addTextureSampler(Handle<Texture> textureHandle, Handle<Sampler> samplerHandle,
                                            uint32_t binding);
     };

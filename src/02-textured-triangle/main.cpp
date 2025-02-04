@@ -13,13 +13,13 @@ using namespace Flare;
 struct TriangleApp : Application {
     struct Vertex {
         glm::vec2 position;
-        glm::vec3 color;
+        glm::vec2 uv;
     };
 
     const std::vector<Vertex> vertices = {
-            {{0.0f,  -0.5f}, {1.0f, 0.0f, 0.0f}},
-            {{0.5f,  0.5f},  {0.0f, 1.0f, 0.0f}},
-            {{-0.5f, 0.5f},  {0.0f, 0.0f, 1.0f}}
+            {{0.0f,  -0.5f}, {1.0f, 0.0f}},
+            {{0.5f,  0.5f},  {0.0f, 1.0f}},
+            {{-0.5f, 0.5f},  {0.0f, 0.0f}}
     };
 
     struct Uniform {
@@ -46,7 +46,7 @@ struct TriangleApp : Application {
 
         shaderCompiler.init();
 
-        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/shaders.slang");
+        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/textured-triangle.slang");
 //        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_hardcode.slang");
 //        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_vertexbuffer.slang");
 
@@ -79,8 +79,8 @@ struct TriangleApp : Application {
                         VkVertexInputAttributeDescription{
                                 .location = 1,
                                 .binding = 0,
-                                .format = VK_FORMAT_R32G32B32_SFLOAT,
-                                .offset = static_cast<uint32_t>(offsetof(Vertex, color)),
+                                .format = VK_FORMAT_R32G32_SFLOAT,
+                                .offset = static_cast<uint32_t>(offsetof(Vertex, uv)),
                         }
                 );
 
@@ -116,11 +116,35 @@ struct TriangleApp : Application {
 
         Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
 
+        const char *texturePath = "assets/uv1.png";
+        int width, height, components;
+        stbi_info(texturePath, &width, &height, &components);
+
+        TextureCI textureCI = {
+                .width = static_cast<uint16_t>(width),
+                .height = static_cast<uint16_t>(height),
+                .depth = 1,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        };
+
+        textureHandle = gpu.createTexture(textureCI);
+        asyncLoader.fileRequests.emplace_back(
+                FileRequest{
+                        .path = texturePath,
+                        .texture = textureHandle,
+                }
+        );
+
         DescriptorSetCI descSetCI = {
                 .layout = pipeline->descriptorSetLayoutHandles[0],
         };
 
-        descSetCI.addBuffer(uniformBufferHandle, 0);
+        descSetCI
+                .addBuffer(uniformBufferHandle, 0)
+                .addTexture(textureHandle, 1)
+                .addSampler(gpu.defaultSampler, 2);
 
         descriptorSetHandle = gpu.createDescriptorSet(descSetCI);
     }
@@ -135,6 +159,9 @@ struct TriangleApp : Application {
                 gpu.newFrame();
 
                 VkCommandBuffer cmd = gpu.getCommandBuffer();
+
+                asyncLoader.signalTextures(cmd);
+
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -214,6 +241,8 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(vertexBufferHandle);
         gpu.destroyBuffer(uniformBufferHandle);
 
+        gpu.destroyTexture(textureHandle);
+
         asyncLoader.shutdown();
         gpu.shutdown();
         window.shutdown();
@@ -227,6 +256,7 @@ struct TriangleApp : Application {
     Handle<Pipeline> pipelineHandle;
     Handle<Buffer> vertexBufferHandle;
     Handle<Buffer> uniformBufferHandle;
+    Handle<Texture> textureHandle;
     Handle<DescriptorSet> descriptorSetHandle;
 };
 
