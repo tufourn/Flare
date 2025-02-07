@@ -9,12 +9,15 @@
 #include <array>
 
 #include "GpuResources.h"
-#include "Scene.h"
 
 struct GLFWwindow;
 
 namespace Flare {
     static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
+
+    static constexpr uint32_t BINDLESS_SET = 0;
+    static constexpr uint32_t BINDLESS_TEXTURE_BINDING = 10;
+    static constexpr uint32_t MAX_BINDLESS_RESOURCES = 1024;
 
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
@@ -55,8 +58,10 @@ namespace Flare {
 
         VkCommandBuffer getCommandBuffer(bool begin = true);
 
+        void submitImmediate(VkCommandBuffer cmd);
+
         void reflect(ReflectOutput &reflection, const std::vector<uint32_t> &spirv,
-                     const std::span<ShaderExecModel> &execModels) const;
+                     const std::span<ShaderExecModel> &execModels) const; // todo: doesn't need to be in this class
 
         Handle<Pipeline> createPipeline(const PipelineCI &ci);
 
@@ -79,8 +84,6 @@ namespace Flare {
         void destroySampler(Handle<Sampler> handle);
 
         Handle<DescriptorSet> createDescriptorSet(const DescriptorSetCI &ci);
-
-        void createSceneFromGltf(Scene &scene, const std::filesystem::path &path);
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
@@ -108,6 +111,7 @@ namespace Flare {
 
         std::array<VkCommandPool, FRAMES_IN_FLIGHT> commandPools;
         std::array<VkCommandBuffer, FRAMES_IN_FLIGHT> commandBuffers;
+        VkFence immediateFence;
 
         VkPhysicalDevice physicalDevice;
         VkPhysicalDeviceProperties physicalDeviceProperties;
@@ -125,8 +129,13 @@ namespace Flare {
         VmaAllocator allocator;
 
         VkDescriptorPool descriptorPool;
+        VkDescriptorPool bindlessDescriptorPool;
+        Handle<DescriptorSetLayout> bindlessDescriptorSetLayoutHandle;
+        Handle<DescriptorSet> bindlessDescriptorSetHandle;
+        std::vector<Handle<Texture>> bindlessTextureUpdates;
 
         Handle<Sampler> defaultSampler;
+        Handle<Texture> defaultTexture;
 
         ResourcePool<Pipeline> pipelines;
         ResourcePool<DescriptorSetLayout> descriptorSetLayouts;

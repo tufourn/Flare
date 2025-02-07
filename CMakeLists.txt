@@ -147,12 +147,10 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/ShaderCompiler.h
         src/Flare/FlareGraphics/VkHelper.cpp
         src/Flare/FlareGraphics/VkHelper.h
-        src/Flare/FlareGraphics/Scene.cpp
-        src/Flare/FlareGraphics/Scene.h
-        src/Flare/FlareGraphics/Mesh.cpp
-        src/Flare/FlareGraphics/Mesh.h
         src/Flare/FlareGraphics/AsyncLoader.cpp
         src/Flare/FlareGraphics/AsyncLoader.h
+        src/Flare/FlareGraphics/GltfScene.cpp
+        src/Flare/FlareGraphics/GltfScene.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal
@@ -166,3 +164,4 @@ include(cmake/CopyAssets.cmake)
 
 add_subdirectory(src/01-triangle)
 add_subdirectory(src/02-textured-triangle)
+add_subdirectory(src/03-gltf)

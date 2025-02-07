@@ -414,6 +414,12 @@ namespace Flare {
         setSwapchainExtent();
         createSwapchain();
 
+        VkFenceCreateInfo fenceCI = {
+                .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        };
+
+        vkCreateFence(device, &fenceCI, nullptr, &immediateFence);
+
         VkSemaphoreCreateInfo semaphoreCI = {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
                 .pNext = nullptr,
@@ -466,6 +472,20 @@ namespace Flare {
         SamplerCI defaultSamplerCI = {};
         defaultSampler = createSampler(defaultSamplerCI);
 
+        uint32_t opaqueWhite = 0xFFFFFFFF;
+        TextureCI defaultTextureCI = {
+                .initialData = &opaqueWhite,
+                .width = 1,
+                .height = 1,
+                .depth = 1,
+                .mipCount = 1,
+                .layerCount = 1,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        };
+        defaultTexture = createTexture(defaultTextureCI);
+
         const uint32_t globalPoolElements = 128;
         std::vector<VkDescriptorPoolSize> poolSizes = {
                 {VK_DESCRIPTOR_TYPE_SAMPLER,                globalPoolElements},
@@ -493,19 +513,86 @@ namespace Flare {
         if (vkCreateDescriptorPool(device, &poolCI, nullptr, &descriptorPool) != VK_SUCCESS) {
             spdlog::error("Failed to create descriptor pool");
         }
+
+        std::vector<VkDescriptorPoolSize> bindlessPoolSizes = {
+                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_BINDLESS_RESOURCES},
+                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          MAX_BINDLESS_RESOURCES},
+        };
+
+        VkDescriptorPoolCreateInfo bindlessPoolCI = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+                .maxSets = static_cast<uint32_t>(MAX_BINDLESS_RESOURCES * bindlessPoolSizes.size()),
+                .poolSizeCount = static_cast<uint32_t>(bindlessPoolSizes.size()),
+                .pPoolSizes = bindlessPoolSizes.data(),
+        };
+
+        if (vkCreateDescriptorPool(device, &bindlessPoolCI, nullptr, &bindlessDescriptorPool) != VK_SUCCESS) {
+            spdlog::error("Failed to create bindless descriptor pool");
+        }
+
+        std::array<VkDescriptorSetLayoutBinding, 2> bindlessBindings = {
+                VkDescriptorSetLayoutBinding{
+                        .binding = BINDLESS_TEXTURE_BINDING,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        .descriptorCount = MAX_BINDLESS_RESOURCES,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                        .pImmutableSamplers = nullptr,
+                },
+                VkDescriptorSetLayoutBinding{
+                        .binding = BINDLESS_TEXTURE_BINDING + 1,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                        .descriptorCount = MAX_BINDLESS_RESOURCES,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                        .pImmutableSamplers = nullptr,
+                },
+        };
+
+        VkDescriptorBindingFlags bindlessFlags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+                                                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+        VkDescriptorBindingFlags bindlessFlagsArray[2] = {bindlessFlags, bindlessFlags};
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo bindlessBindingFlags = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                .pNext = nullptr,
+                .bindingCount = bindlessBindings.size(),
+                .pBindingFlags = bindlessFlagsArray,
+        };
+
+        DescriptorSetLayoutCI bindlessLayoutCI = {
+                .bindings = bindlessBindings.data(),
+                .bindingCount = bindlessBindings.size(),
+                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                .bindingFlags = &bindlessBindingFlags,
+        };
+
+        bindlessDescriptorSetLayoutHandle = createDescriptorSetLayout(bindlessLayoutCI);
+
+        DescriptorSetCI bindlessSetCI = {
+                .layout = bindlessDescriptorSetLayoutHandle,
+                .bindless = true,
+        };
+
+        bindlessDescriptorSetHandle = createDescriptorSet(bindlessSetCI);
     }
 
     void GpuDevice::shutdown() {
         vkDeviceWaitIdle(device);
 
         destroySampler(defaultSampler);
+        destroyTexture(defaultTexture);
 
+        destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
+
+        vkDestroyDescriptorPool(device, bindlessDescriptorPool, nullptr);
         vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
         for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
             vkDestroyCommandPool(device, commandPools[i], nullptr);
         }
 
+        vkDestroyFence(device, immediateFence, nullptr);
         vkDestroySemaphore(device, graphicsTimelineSemaphore, nullptr);
         for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, imageAcquiredSemaphores[i], nullptr);
@@ -569,7 +656,6 @@ namespace Flare {
             glfwGetFramebufferSize(glfwWindow, &width, &height);
 
             VkExtent2D actualExtent = {
-
                     static_cast<uint32_t>(width),
                     static_cast<uint32_t>(height)
             };
@@ -693,6 +779,12 @@ namespace Flare {
 
         for (auto &set: reflectOutput.descriptorSets) {
             uint32_t setIndex = set.first;
+            if (setIndex == BINDLESS_SET) {
+                pipelineSetLayouts.push_back(
+                        descriptorSetLayouts.get(bindlessDescriptorSetLayoutHandle)->descriptorSetLayout);
+                continue;
+            }
+
             std::vector<VkDescriptorSetLayoutBinding> *bindings = &set.second;
 
             DescriptorSetLayoutCI descriptorSetLayoutCI = {
@@ -700,7 +792,8 @@ namespace Flare {
                     .bindingCount = bindings->size(),
             };
 
-            Handle<DescriptorSetLayout> descriptorSetLayoutHandle = createDescriptorSetLayout(descriptorSetLayoutCI);
+            Handle<DescriptorSetLayout> descriptorSetLayoutHandle = createDescriptorSetLayout(
+                    descriptorSetLayoutCI);
 
             pipeline->descriptorSetLayoutHandles.push_back(descriptorSetLayoutHandle);
             pipelineSetLayouts.push_back(descriptorSetLayouts.get(descriptorSetLayoutHandle)->descriptorSetLayout);
@@ -960,7 +1053,7 @@ namespace Flare {
 
                 spdlog::info("{} shader: Found UBO {} at set = {}, binding = {}",
                              stageString, uniform.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, model.stage);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, model.stage);
             }
 
             for (auto &image: res.separate_images) {
@@ -980,6 +1073,15 @@ namespace Flare {
                              stageString, sampler.name, set, binding);
                 reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_SAMPLER, model.stage);
             }
+
+            for (auto &sampledImage: res.sampled_images) {
+                uint32_t set = comp.get_decoration(sampledImage.id, spv::DecorationDescriptorSet);
+
+                uint32_t binding = comp.get_decoration(sampledImage.id, spv::DecorationBinding);
+                spdlog::info("{} shader: Found combined image sampler {} at set = {}, binding = {}",
+                             stageString, sampledImage.name, set, binding);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, model.stage);
+            }
         }
     }
 
@@ -993,8 +1095,8 @@ namespace Flare {
 
         VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
+                .pNext = ci.bindingFlags,
+                .flags = ci.flags,
                 .bindingCount = static_cast<uint32_t>(ci.bindingCount),
                 .pBindings = ci.bindings,
         };
@@ -1042,7 +1144,8 @@ namespace Flare {
 
         VkSemaphore *imageAcquiredSemaphore = &imageAcquiredSemaphores[currentFrame];
         VkResult acquireResult = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX,
-                                                       *imageAcquiredSemaphore, VK_NULL_HANDLE, &swapchainImageIndex);
+                                                       *imageAcquiredSemaphore, VK_NULL_HANDLE,
+                                                       &swapchainImageIndex);
         if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
             resizeSwapchain();
             resized = true;
@@ -1054,6 +1157,43 @@ namespace Flare {
     void GpuDevice::present() {
         VkSemaphore *imageAcquiredSemaphore = &imageAcquiredSemaphores[currentFrame];
         VkSemaphore *renderCompletedSemaphore = &renderCompletedSemaphores[currentFrame];
+
+        if (!bindlessTextureUpdates.empty()) {
+            VkWriteDescriptorSet bindlessWrites[MAX_BINDLESS_RESOURCES];
+            VkDescriptorImageInfo bindlessImageInfo[MAX_BINDLESS_RESOURCES];
+            uint32_t writeIndex = 0;
+
+            for (auto &handle: bindlessTextureUpdates) {
+                Texture *texture = textures.get(handle);
+
+                VkDescriptorImageInfo &imageInfo = bindlessImageInfo[writeIndex];
+                imageInfo = {
+                        .sampler = texture->sampler.isValid() ? samplers.get(texture->sampler)->sampler :
+                                   samplers.get(defaultSampler)->sampler,
+                        .imageView = texture->format != VK_FORMAT_UNDEFINED ? texture->imageView :
+                                     textures.get(defaultTexture)->imageView,
+                        .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+                };
+
+                VkWriteDescriptorSet &descriptorWrite = bindlessWrites[writeIndex];
+                descriptorWrite = {
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .pNext = nullptr,
+                        .dstSet = descriptorSets.get(bindlessDescriptorSetHandle)->descriptorSet,
+                        .dstBinding = BINDLESS_TEXTURE_BINDING,
+                        .dstArrayElement = handle.index,
+                        .descriptorCount = 1,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        .pImageInfo = &imageInfo,
+                };
+
+                writeIndex++;
+            }
+
+            bindlessTextureUpdates.clear();
+
+            vkUpdateDescriptorSets(device, writeIndex, bindlessWrites, 0, nullptr);
+        }
 
         std::vector<VkSemaphoreSubmitInfo> waitSemaphores;
         waitSemaphores.reserve(2);
@@ -1187,18 +1327,13 @@ namespace Flare {
 
         VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
 
-        if (ci.mapped || ci.initialData) { // needs to map to copy initial data
-            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        if (ci.mapped) {
+            allocCI.flags =
+                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
-        vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation, &buffer->allocationInfo);
-
-        if (ci.initialData) {
-            void *data;
-            vmaMapMemory(allocator, buffer->allocation, &data);
-            memcpy(data, ci.initialData, ci.size);
-            vmaUnmapMemory(allocator, buffer->allocation);
-        }
+        vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
+                        &buffer->allocationInfo);
 
         buffer->size = ci.size;
 
@@ -1214,6 +1349,8 @@ namespace Flare {
         Buffer *buffer = buffers.get(handle);
 
         vmaDestroyBuffer(allocator, buffer->buffer, buffer->allocation);
+
+        buffers.release(handle);
     }
 
     void GpuDevice::resizeSwapchain() {
@@ -1227,76 +1364,6 @@ namespace Flare {
 
         destroySwapchain();
         createSwapchain();
-    }
-
-    //todo
-    void GpuDevice::createSceneFromGltf(Scene &scene, const std::filesystem::path &path) {
-        std::filesystem::path directory = path.parent_path();
-
-        cgltf_options options = {};
-        cgltf_data *data = nullptr;
-        cgltf_result result = cgltf_parse_file(&options, path.string().c_str(), &data);
-        if (result != cgltf_result_success) {
-            spdlog::error("Failed to load gltf file {}", path.string());
-            return;
-        }
-        cgltf_load_buffers(&options, data, path.string().c_str());
-
-        for (size_t i = 0; i < data->images_count; i++) {
-            const cgltf_image *cgltfImage = &data->images[i];
-            const char *uri = cgltfImage->uri;
-
-            int width, height, channelCount;
-
-            if (uri) {
-                if (strncmp(uri, "data:", 5) == 0) {
-                    // embedded image base64
-                    const char *comma = strchr(uri, ',');
-                    if (comma && comma - uri >= 7 && strncmp(comma - 7, ";base64", 7) == 0) {
-                        const char *base64 = comma + 1;
-                        const size_t base64Size = strlen(base64);
-                        size_t decodedBinarySize = base64Size - base64Size / 4;
-
-                        if (base64Size >= 2) {
-                            decodedBinarySize -= base64[base64Size - 1] == '=';
-                            decodedBinarySize -= base64[base64Size - 2] == '=';
-                        }
-
-                        void *imageData = nullptr;
-                        cgltf_options base64Options = {};
-
-                        if (cgltf_load_buffer_base64(&base64Options, decodedBinarySize, base64, &imageData) !=
-                            cgltf_result_success) {
-                            spdlog::error("Failed to parse base64 image uri");
-                        } else {
-                            unsigned char *stbData = stbi_load_from_memory(
-                                    static_cast<const unsigned char *>(imageData),
-                                    static_cast<int>(decodedBinarySize),
-                                    &width, &height, &channelCount, STBI_rgb_alpha);
-
-                            TextureCI textureCI = {
-                                    .initialData = stbData,
-                                    .width = static_cast<uint16_t>(width),
-                                    .height = static_cast<uint16_t>(height),
-                                    .type = VK_IMAGE_TYPE_2D,
-                            };
-
-                            stbi_image_free(stbData);
-                            free(imageData);
-                        }
-                    } else {
-                        spdlog::error("Invalid embedded image uri");
-                    }
-                } else {
-                    // image file
-
-                }
-            } else {
-                // image from buffer
-            }
-        }
-
-        cgltf_free(data);
     }
 
     Handle<Texture> GpuDevice::createTexture(const TextureCI &ci) {
@@ -1358,6 +1425,66 @@ namespace Flare {
 
         vkCreateImageView(device, &imageViewCI, nullptr, &texture->imageView);
 
+        if (ci.initialData) {
+            size_t dataSize = ci.width * ci.height * ci.depth * 4;
+
+            BufferCI stagingBufferCI = {
+                    .size = dataSize,
+                    .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    .mapped = true,
+            };
+            Handle<Buffer> textureStagingBufferHandle = createBuffer(stagingBufferCI);
+            Buffer *textureStagingBuffer = buffers.get(textureStagingBufferHandle);
+
+            memcpy(textureStagingBuffer->allocationInfo.pMappedData, ci.initialData, dataSize);
+
+            VkCommandBuffer cmd = getCommandBuffer();
+            VkHelper::transitionImage(cmd, texture->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+            VkBufferImageCopy2 region = {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
+                    .pNext = nullptr,
+                    .bufferOffset = 0,
+                    .bufferRowLength = 0,
+                    .bufferImageHeight = 0,
+                    .imageSubresource = {
+                            .aspectMask = static_cast<VkImageAspectFlags>(ci.format == VK_FORMAT_D32_SFLOAT ?
+                                                                          VK_IMAGE_ASPECT_DEPTH_BIT :
+                                                                          VK_IMAGE_ASPECT_COLOR_BIT),
+                            .mipLevel = 0,
+                            .baseArrayLayer = 0,
+                            .layerCount = 1,
+                    },
+                    .imageOffset = {0, 0, 0},
+                    .imageExtent = {ci.width, ci.height, ci.depth},
+            };
+
+            VkCopyBufferToImageInfo2 copyInfo = {
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+                    .pNext = nullptr,
+                    .srcBuffer = textureStagingBuffer->buffer,
+                    .dstImage = texture->image,
+                    .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    .regionCount = 1,
+                    .pRegions = &region,
+            };
+
+            vkCmdCopyBufferToImage2(cmd, &copyInfo);
+
+            VkHelper::transitionImage(cmd, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+            submitImmediate(cmd);
+
+            // todo: mips
+
+            // todo: keep a persistently mapped staging buffer, and recreate it if needed?
+            destroyBuffer(textureStagingBufferHandle);
+        }
+
+        bindlessTextureUpdates.push_back(handle);
+
         return handle;
     }
 
@@ -1371,6 +1498,8 @@ namespace Flare {
 
         vkDestroyImageView(device, texture->imageView, nullptr);
         vmaDestroyImage(allocator, texture->image, texture->allocation);
+
+        textures.release(handle);
     }
 
     Handle<DescriptorSet> GpuDevice::createDescriptorSet(const DescriptorSetCI &ci) {
@@ -1386,7 +1515,7 @@ namespace Flare {
         VkDescriptorSetAllocateInfo allocInfo = {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
                 .pNext = nullptr,
-                .descriptorPool = descriptorPool,
+                .descriptorPool = ci.bindless ? bindlessDescriptorPool : descriptorPool,
                 .descriptorSetCount = 1,
                 .pSetLayouts = &layout->descriptorSetLayout,
         };
@@ -1403,7 +1532,8 @@ namespace Flare {
             VkDescriptorSetLayoutBinding layoutBinding = layout->bindings.at(ci.bindings[i]);
 
             switch (layoutBinding.descriptorType) {
-                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER: {
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: {
                     Handle<Buffer> bufferHandle = ci.buffers[i];
                     Buffer *buffer = buffers.get(bufferHandle);
 
@@ -1528,5 +1658,26 @@ namespace Flare {
         Sampler *sampler = samplers.get(handle);
 
         vkDestroySampler(device, sampler->sampler, nullptr);
+
+        samplers.release(handle);
+    }
+
+    void GpuDevice::submitImmediate(VkCommandBuffer cmd) {
+        vkEndCommandBuffer(cmd);
+
+        vkResetFences(device, 1, &immediateFence);
+
+        VkSubmitInfo submitInfo = {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .pNext = nullptr,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &cmd,
+        };
+
+        vkQueueSubmit(mainQueue, 1, &submitInfo, immediateFence);
+
+        if (vkGetFenceStatus(device, immediateFence) != VK_SUCCESS) {
+            vkWaitForFences(device, 1, &immediateFence, VK_TRUE, UINT64_MAX);
+        }
     }
 }

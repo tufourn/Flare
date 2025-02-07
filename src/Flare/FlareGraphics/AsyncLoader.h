@@ -1,7 +1,8 @@
 #pragma once
 
+#include <filesystem>
+
 #include "GpuDevice.h"
-#include <stb_image.h>
 
 namespace Flare {
     struct UploadRequest {
@@ -33,6 +34,9 @@ namespace Flare {
         std::mutex textureMutex;
         std::vector<Handle<Texture>> pendingTextures;
 
+        std::mutex bufferMutex;
+        std::vector<Handle<Buffer>> pendingBuffers;
+
         void init(GpuDevice &gpuDevice);
 
         void shutdown();
@@ -41,6 +45,6 @@ namespace Flare {
 
         void signalTextures(VkCommandBuffer cmd);
 
-        size_t memoryAlign(size_t size, size_t alignment);
+        void signalBuffers(VkCommandBuffer cmd);
     };
 }

@@ -8,5 +8,16 @@ namespace VkHelper {
     VkComponentMapping identityRGBA();
 
     VkImageSubresourceRange subresourceRange(bool depth = false);
+
+    size_t memoryAlign(size_t size, size_t alignment);
+
+    VkFilter extractGltfMagFilter(int gltfMagFilter);
+
+    VkFilter extractGltfMinFilter(int gltfMinFilter);
+
+    VkSamplerAddressMode extractGltfWrapMode(int gltfWrap);
+
+    VkSamplerMipmapMode extractGltfMipmapMode(int gltfMinFilter);
+
 }
 

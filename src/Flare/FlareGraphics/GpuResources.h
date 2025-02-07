@@ -163,6 +163,8 @@ namespace Flare {
     struct DescriptorSetLayoutCI {
         VkDescriptorSetLayoutBinding *bindings = nullptr;
         size_t bindingCount = 0;
+        VkDescriptorSetLayoutCreateFlags flags = 0;
+        VkDescriptorSetLayoutBindingFlagsCreateInfo *bindingFlags = nullptr;
     };
 
     struct DescriptorSetLayout {
@@ -190,7 +192,6 @@ namespace Flare {
         size_t size = 0;
         VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
         bool mapped = false;
-        void *initialData = nullptr;
     };
 
     struct Buffer {
@@ -198,29 +199,6 @@ namespace Flare {
         VmaAllocation allocation;
         VmaAllocationInfo allocationInfo;
         size_t size;
-    };
-
-    struct TextureCI {
-        void *initialData = nullptr;
-        uint16_t width = 1;
-        uint16_t height = 1;
-        uint16_t depth = 1;
-        uint16_t mipCount = 1;
-        uint16_t layerCount = 1;
-        VkFormat format = VK_FORMAT_UNDEFINED;
-        VkImageType type = VK_IMAGE_TYPE_MAX_ENUM;
-        VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
-    };
-
-    struct Texture {
-        VkImage image;
-        VkImageView imageView;
-        VkFormat format;
-        VmaAllocation allocation;
-
-        uint16_t width;
-        uint16_t height;
-        uint16_t depth;
     };
 
     struct SamplerCI {
@@ -237,6 +215,32 @@ namespace Flare {
         VkSampler sampler;
     };
 
+
+    struct TextureCI {
+        void* initialData = nullptr;
+        uint16_t width = 1;
+        uint16_t height = 1;
+        uint16_t depth = 1;
+        uint16_t mipCount = 1;
+        uint16_t layerCount = 1;
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        VkImageType type = VK_IMAGE_TYPE_MAX_ENUM;
+        VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+    };
+
+    struct Texture {
+        VkImage image = VK_NULL_HANDLE;
+        VkImageView imageView = VK_NULL_HANDLE;
+        VkFormat format = VK_FORMAT_UNDEFINED;
+        VmaAllocation allocation = nullptr;
+
+        uint16_t width = 1;
+        uint16_t height = 1;
+        uint16_t depth = 1;
+
+        Handle<Sampler> sampler;
+    };
+
     struct DescriptorSetCI {
         Handle<DescriptorSetLayout> layout;
 
@@ -246,6 +250,8 @@ namespace Flare {
         std::vector<Handle<Sampler>> samplers;
         std::vector<Handle<Buffer>> buffers;
         std::vector<uint32_t> bindings;
+
+        bool bindless = false;
 
         DescriptorSetCI &addBuffer(Handle<Buffer> handle, uint32_t binding);
 

@@ -7,6 +7,7 @@
 #include "FlareGraphics/VkHelper.h"
 #include "FlareGraphics/AsyncLoader.h"
 #include "glm/ext/matrix_transform.hpp"
+#include "FlareGraphics/GltfScene.h"
 #include <stb_image.h>
 
 using namespace Flare;
@@ -18,9 +19,13 @@ struct TriangleApp : Application {
     };
 
     const std::vector<Vertex> vertices = {
-            {{0.0f,  -0.5f}, {1.0f, 0.0f}},
-            {{0.5f,  0.5f},  {0.0f, 1.0f}},
-            {{-0.5f, 0.5f},  {0.0f, 0.0f}}
+            {{-0.5f, -0.5f}, {0.0f, 1.0f}},  // Bottom-left
+            {{0.5f,  -0.5f}, {1.0f, 1.0f}},  // Bottom-right
+            {{-0.5f, 0.5f},  {0.0f, 0.0f}},  // Top-left
+
+            {{-0.5f, 0.5f},  {0.0f, 0.0f}},  // Top-left
+            {{0.5f,  -0.5f}, {1.0f, 1.0f}},  // Bottom-right
+            {{0.5f,  0.5f},  {1.0f, 0.0f}}   // Top-right
     };
 
     struct Uniform {
@@ -89,6 +94,8 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
+        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+
         BufferCI vertexBufferCI = {
                 .size = sizeof(Vertex) * vertices.size(),
                 .usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -96,74 +103,17 @@ struct TriangleApp : Application {
 
         vertexBufferHandle = gpu.createBuffer(vertexBufferCI);
 
-        BufferCI uniformBufferCI = {
-                .size = sizeof(Uniform),
-                .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        };
-
-        uniformBufferHandle = gpu.createBuffer(uniformBufferCI);
-
         asyncLoader.uploadRequests.emplace_back(
                 UploadRequest{
                         .dstBuffer = vertexBufferHandle,
                         .data = (void *) vertices.data(),
                 }
         );
-//
-//        asyncLoader.uploadRequests.emplace_back(
-//                UploadRequest{
-//                        .dstBuffer = uniformBufferHandle,
-//                        .data = (void *) &uniform,
-//                }
-//        );
-
-        Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
-
-        const char *texturePath = "assets/uv1.png";
-        int width, height, components;
-        stbi_info(texturePath, &width, &height, &components);
-
-        TextureCI textureCI = {
-                .width = static_cast<uint16_t>(width),
-                .height = static_cast<uint16_t>(height),
-                .depth = 1,
-                .format = VK_FORMAT_R8G8B8A8_UNORM,
-                .type = VK_IMAGE_TYPE_2D,
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        };
-
-        textureHandle = gpu.createTexture(textureCI);
-        asyncLoader.fileRequests.emplace_back(
-                FileRequest{
-                        .path = texturePath,
-                        .texture = textureHandle,
-                }
-        );
-
-        DescriptorSetCI descSetCI = {
-                .layout = pipeline->descriptorSetLayoutHandles[0],
-        };
-
-        descSetCI
-                .addBuffer(uniformBufferHandle, 0)
-                .addTexture(textureHandle, 1)
-                .addSampler(gpu.defaultSampler, 2);
-
-        descriptorSetHandle = gpu.createDescriptorSet(descSetCI);
     }
 
     void loop() override {
         while (!window.shouldClose()) {
             window.pollEvents();
-
-            uniform.mvp = glm::rotate(glm::mat4(1.f), static_cast<float>(gpu.absoluteFrame / 1.f),
-                                      glm::vec3(0.0f, 0.0f, 1.0f));
-            asyncLoader.uploadRequests.emplace_back(
-                    UploadRequest{
-                            .dstBuffer = uniformBufferHandle,
-                            .data = (void *) &uniform,
-                    }
-            );
 
             while (!asyncLoader.uploadRequests.empty()) {
                 asyncLoader.update();
@@ -206,18 +156,15 @@ struct TriangleApp : Application {
                 Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
 
                 vkCmdBeginRendering(cmd, &renderingInfo);
-                vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+                vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
 
                 VkBuffer vertexBuffers[] = {gpu.buffers.get(vertexBufferHandle)->buffer};
                 VkDeviceSize offsets[] = {0};
                 vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
 
-                DescriptorSet *descSet = gpu.descriptorSets.get(descriptorSetHandle);
-                VkDescriptorSet vkDescSet = descSet->descriptorSet;
-
-                uint32_t offset = 0;
-                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipelineLayout, 0, 1,
-                                        &vkDescSet, 1, &offset);
+                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0, 1,
+                                        &gpu.descriptorSets.get(gpu.bindlessDescriptorSetHandle)->descriptorSet, 0,
+                                        nullptr);
 
                 VkViewport viewport = {
                         .x = 0.f,
@@ -235,7 +182,7 @@ struct TriangleApp : Application {
                 };
                 vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-                vkCmdDraw(cmd, 3, 1, 0, 0);
+                vkCmdDraw(cmd, 6, 1, 0, 0);
 
                 vkCmdEndRendering(cmd);
 
@@ -253,11 +200,10 @@ struct TriangleApp : Application {
     void shutdown() override {
         vkDeviceWaitIdle(gpu.device);
 
+        gltf.shutdown();
+
         gpu.destroyPipeline(pipelineHandle);
         gpu.destroyBuffer(vertexBufferHandle);
-        gpu.destroyBuffer(uniformBufferHandle);
-
-        gpu.destroyTexture(textureHandle);
 
         asyncLoader.shutdown();
         gpu.shutdown();
@@ -271,9 +217,9 @@ struct TriangleApp : Application {
 
     Handle<Pipeline> pipelineHandle;
     Handle<Buffer> vertexBufferHandle;
-    Handle<Buffer> uniformBufferHandle;
-    Handle<Texture> textureHandle;
     Handle<DescriptorSet> descriptorSetHandle;
+
+    GltfScene gltf;
 };
 
 int main() {

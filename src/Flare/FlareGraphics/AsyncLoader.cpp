@@ -3,6 +3,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 
 #include <stb_image.h>
+#include "VkHelper.h"
 
 namespace Flare {
     static constexpr size_t STAGING_BUFFER_SIZE_MB = 64;
@@ -98,7 +99,7 @@ namespace Flare {
                 constexpr size_t channelCount = 4;
                 const size_t imageSize = texture->width * texture->height * channelCount;
 
-                const size_t alignedImageSize = memoryAlign(imageSize, 4);
+                const size_t alignedImageSize = VkHelper::memoryAlign(imageSize, 4);
                 size_t offset = std::atomic_fetch_add(&stagingBufferOffset, alignedImageSize);
 
                 Buffer *stagingBuffer = gpu->buffers.get(stagingBufferHandle);
@@ -214,7 +215,7 @@ namespace Flare {
             } else if (request.dstBuffer.isValid()) {
                 Buffer *dstBuffer = gpu->buffers.get(request.dstBuffer);
 
-                const size_t alignedBufferSize = memoryAlign(dstBuffer->size, 64);
+                const size_t alignedBufferSize = VkHelper::memoryAlign(dstBuffer->size, 64);
                 size_t offset = std::atomic_fetch_add(&stagingBufferOffset, alignedBufferSize);
 
                 Buffer *stagingBuffer = gpu->buffers.get(stagingBufferHandle);
@@ -286,15 +287,13 @@ namespace Flare {
             if (request.texture.isValid()) {
                 std::lock_guard<std::mutex> lock(textureMutex);
                 pendingTextures.push_back(request.texture);
+            } else if (request.dstBuffer.isValid()) {
+                std::lock_guard<std::mutex> lock(bufferMutex);
+                pendingBuffers.push_back(request.dstBuffer);
             }
         }
 
         stagingBufferOffset = 0;
-    }
-
-    size_t AsyncLoader::memoryAlign(size_t size, size_t alignment) {
-        const size_t alignmentMask = alignment - 1;
-        return (size + alignmentMask) & ~alignmentMask;
     }
 
     void AsyncLoader::signalTextures(VkCommandBuffer cmd) {
@@ -340,5 +339,43 @@ namespace Flare {
         }
 
         pendingTextures.clear();
+    }
+
+    void AsyncLoader::signalBuffers(VkCommandBuffer cmd) {
+        std::lock_guard<std::mutex> lock(bufferMutex);
+
+        if (pendingBuffers.empty()) {
+            return;
+        }
+
+        for (const auto& handle : pendingBuffers) {
+            Buffer* buffer = gpu->buffers.get(handle);
+
+            VkBufferMemoryBarrier2 barrier = {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .srcAccessMask = 0,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
+                    .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
+                    .srcQueueFamilyIndex = gpu->transferFamily,
+                    .dstQueueFamilyIndex = gpu->mainFamily,
+                    .buffer = buffer->buffer,
+                    .offset = 0,
+                    .size = buffer->size
+            };
+
+            VkDependencyInfo dep = {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .bufferMemoryBarrierCount = 1,
+                    .pBufferMemoryBarriers = &barrier,
+            };
+
+            vkCmdPipelineBarrier2(cmd, &dep);
+        }
+
+        pendingBuffers.clear();
     }
 }
