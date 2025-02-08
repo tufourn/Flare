@@ -7,6 +7,7 @@
 #include <span>
 #include <spdlog/spdlog.h>
 #include <vk_mem_alloc.h>
+#include <map>
 
 namespace Flare {
     constexpr uint32_t invalidIndex = 0xFFFFFFFF;
@@ -146,7 +147,7 @@ namespace Flare {
     };
 
     struct ReflectOutput {
-        std::unordered_map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> descriptorSets;
+        std::map<uint32_t, std::vector<VkDescriptorSetLayoutBinding>> descriptorSets;
 
         void addBinding(uint32_t set, uint32_t binding, uint32_t count,
                         VkDescriptorType type, VkShaderStageFlags stageFlag);

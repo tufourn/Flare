@@ -8,26 +8,10 @@
 #include "FlareGraphics/AsyncLoader.h"
 #include "glm/ext/matrix_transform.hpp"
 #include "FlareGraphics/GltfScene.h"
-#include <stb_image.h>
 
 using namespace Flare;
 
 struct TriangleApp : Application {
-    struct Vertex {
-        glm::vec2 position;
-        glm::vec2 uv;
-    };
-
-    const std::vector<Vertex> vertices = {
-            {{-0.5f, -0.5f}, {0.0f, 1.0f}},  // Bottom-left
-            {{0.5f,  -0.5f}, {1.0f, 1.0f}},  // Bottom-right
-            {{-0.5f, 0.5f},  {0.0f, 0.0f}},  // Top-left
-
-            {{-0.5f, 0.5f},  {0.0f, 0.0f}},  // Top-left
-            {{0.5f,  -0.5f}, {1.0f, 1.0f}},  // Bottom-right
-            {{0.5f,  0.5f},  {1.0f, 0.0f}}   // Top-right
-    };
-
     struct Uniform {
         glm::mat4 mvp;
     };
@@ -54,9 +38,7 @@ struct TriangleApp : Application {
 
         shaderCompiler.init();
 
-        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/textured-triangle.slang");
-//        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_hardcode.slang");
-//        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/triangle_vertexbuffer.slang");
+        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/gltf.slang");
 
         Flare::ReflectOutput reflection;
         std::vector<ShaderExecModel> execModels = {
@@ -67,53 +49,106 @@ struct TriangleApp : Application {
         PipelineCI pipelineCI;
         pipelineCI.shaderStages.addBinary({execModels, shader});
         pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
-        pipelineCI.vertexInput
-                .addBinding(
-                        VkVertexInputBindingDescription{
-                                .binding = 0,
-                                .stride = sizeof(Vertex),
-                                .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-                        }
-                )
-                .addAttribute(
-                        VkVertexInputAttributeDescription{
-                                .location = 0,
-                                .binding = 0,
-                                .format = VK_FORMAT_R32G32_SFLOAT,
-                                .offset = static_cast<uint32_t>(offsetof(Vertex, position)),
-                        }
-                )
-                .addAttribute(
-                        VkVertexInputAttributeDescription{
-                                .location = 1,
-                                .binding = 0,
-                                .format = VK_FORMAT_R32G32_SFLOAT,
-                                .offset = static_cast<uint32_t>(offsetof(Vertex, uv)),
-                        }
-                );
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
         gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 
-        BufferCI vertexBufferCI = {
-                .size = sizeof(Vertex) * vertices.size(),
-                .usageFlags = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        BufferCI uniformBufferCI = {
+                .size = sizeof(Uniform),
+                .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         };
 
-        vertexBufferHandle = gpu.createBuffer(vertexBufferCI);
+        uniformBufferHandle = gpu.createBuffer(uniformBufferCI);
 
+        BufferCI positionsCI = {
+                .size = sizeof(glm::vec4) * gltf.positions.size(),
+                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        };
+        positionBufferHandle = gpu.createBuffer(positionsCI);
         asyncLoader.uploadRequests.emplace_back(
                 UploadRequest{
-                        .dstBuffer = vertexBufferHandle,
-                        .data = (void *) vertices.data(),
+                        .dstBuffer = positionBufferHandle,
+                        .data = (void *) gltf.positions.data(),
                 }
         );
+
+        BufferCI indicesCI = {
+                .size = sizeof(uint32_t) * gltf.indices.size(),
+                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                              VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        };
+        indexBufferHandle = gpu.createBuffer(indicesCI);
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = indexBufferHandle,
+                        .data = (void *) gltf.indices.data(),
+                }
+        );
+
+        BufferCI uvCI = {
+                .size = sizeof(glm::vec2) * gltf.uvs.size(),
+                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        };
+        uvBufferHandle = gpu.createBuffer(uvCI);
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = uvBufferHandle,
+                        .data = (void *) gltf.uvs.data(),
+                }
+        );
+
+        BufferCI transformsCI = {
+                .size = sizeof(glm::mat4) * gltf.transforms.size(),
+                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        };
+        transformBufferHandle = gpu.createBuffer(transformsCI);
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = transformBufferHandle,
+                        .data = (void *) gltf.transforms.data(),
+                }
+        );
+
+        BufferCI meshDrawCI = {
+                .size = sizeof(MeshDraw) * gltf.meshDraws.size(),
+                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        };
+        meshDrawHandle = gpu.createBuffer(meshDrawCI);
+//        asyncLoader.uploadRequests.emplace_back(
+//                UploadRequest{
+//                        .dstBuffer = meshDrawHandle,
+//                        .data = (void *) gltf.meshDraws.data(),
+//                }
+//        );
+
+        Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
+
+        DescriptorSetCI descCI = {
+                .layout = pipeline->descriptorSetLayoutHandles[0],
+        };
+        descCI
+                .addBuffer(positionBufferHandle, 0)
+                .addBuffer(uvBufferHandle, 1)
+                .addBuffer(transformBufferHandle, 2)
+                .addBuffer(uniformBufferHandle, 3);
+
+        descriptorSetHandle = gpu.createDescriptorSet(descCI);
     }
 
     void loop() override {
         while (!window.shouldClose()) {
             window.pollEvents();
+
+            uniform.mvp = glm::rotate(glm::mat4(1.f), static_cast<float>(gpu.absoluteFrame / 10000.f),
+                                      glm::vec3(0.0f, 1.0f, 0.0f));
+            asyncLoader.uploadRequests.emplace_back(
+                    UploadRequest{
+                            .dstBuffer = uniformBufferHandle,
+                            .data = (void *) &uniform,
+                    }
+            );
 
             while (!asyncLoader.uploadRequests.empty()) {
                 asyncLoader.update();
@@ -158,12 +193,14 @@ struct TriangleApp : Application {
                 vkCmdBeginRendering(cmd, &renderingInfo);
                 vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
 
-                VkBuffer vertexBuffers[] = {gpu.buffers.get(vertexBufferHandle)->buffer};
-                VkDeviceSize offsets[] = {0};
-                vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+                vkCmdBindIndexBuffer(cmd, gpu.buffers.get(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
 
-                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0, 1,
+                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, BINDLESS_SET, 1,
                                         &gpu.descriptorSets.get(gpu.bindlessDescriptorSetHandle)->descriptorSet, 0,
+                                        nullptr);
+
+                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 1, 1,
+                                        &gpu.descriptorSets.get(descriptorSetHandle)->descriptorSet, 0,
                                         nullptr);
 
                 VkViewport viewport = {
@@ -182,7 +219,9 @@ struct TriangleApp : Application {
                 };
                 vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-                vkCmdDraw(cmd, 6, 1, 0, 0);
+                for (const auto &md: gltf.meshDraws) {
+                    vkCmdDrawIndexed(cmd, md.indexCount, 1, md.indexOffset, md.positionOffset, 0);
+                }
 
                 vkCmdEndRendering(cmd);
 
@@ -203,7 +242,12 @@ struct TriangleApp : Application {
         gltf.shutdown();
 
         gpu.destroyPipeline(pipelineHandle);
-        gpu.destroyBuffer(vertexBufferHandle);
+        gpu.destroyBuffer(positionBufferHandle);
+        gpu.destroyBuffer(indexBufferHandle);
+        gpu.destroyBuffer(transformBufferHandle);
+        gpu.destroyBuffer(uvBufferHandle);
+        gpu.destroyBuffer(meshDrawHandle);
+        gpu.destroyBuffer(uniformBufferHandle);
 
         asyncLoader.shutdown();
         gpu.shutdown();
@@ -216,7 +260,14 @@ struct TriangleApp : Application {
     Flare::AsyncLoader asyncLoader;
 
     Handle<Pipeline> pipelineHandle;
-    Handle<Buffer> vertexBufferHandle;
+
+    Handle<Buffer> uniformBufferHandle;
+    Handle<Buffer> positionBufferHandle;
+    Handle<Buffer> indexBufferHandle;
+    Handle<Buffer> transformBufferHandle;
+    Handle<Buffer> uvBufferHandle;
+    Handle<Buffer> meshDrawHandle;
+
     Handle<DescriptorSet> descriptorSetHandle;
 
     GltfScene gltf;

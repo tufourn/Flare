@@ -4,7 +4,6 @@
 #include <slang-com-ptr.h>
 #include <slang-com-helper.h>
 #include <filesystem>
-#include <unordered_map>
 
 #include "GpuResources.h"
 

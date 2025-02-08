@@ -102,32 +102,14 @@ namespace Flare {
             samplers[i] = gpu->createSampler(ci);
         }
 
-        buffers.resize(data->buffer_views_count);
-        for (size_t i = 0; i < data->buffer_views_count; i++) {
-            cgltf_buffer_view &bufferView = data->buffer_views[i];
-
-            BufferCI ci = {
-                    .size = bufferView.size,
-                    .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-            };
-
-            buffers[i] = gpu->createBuffer(ci);
-
-            asyncLoader->uploadRequests.emplace_back(
-                    UploadRequest{
-                            .dstBuffer = buffers[i],
-                            .data = bufferView.buffer + bufferView.offset,
-                    }
-            );
-        }
-
         for (size_t i = 0; i < data->textures_count; i++) {
             cgltf_texture &gltfTexture = data->textures[i];
 
             if (gltfTexture.image) {
                 uint32_t textureIndex = gltfTexture.image - data->images;
-                Texture* texture = gpu->textures.get(textures[textureIndex]);
+                Texture *texture = gpu->textures.get(textures[textureIndex]);
 
+                // technically not correct as a gltf image can be used with different samplers in different textures
                 if (gltfTexture.sampler) {
                     uint32_t samplerIndex = gltfTexture.sampler - data->samplers;
                     texture->sampler = samplers[samplerIndex];
@@ -169,45 +151,93 @@ namespace Flare {
             if (material.emissive_texture.texture) {
                 materials[i].emissiveTextureOffset = material.emissive_texture.texture - data->textures;
             }
+
+            //todo: fill material buffer
         }
 
         meshes.resize(data->meshes_count);
+        uint32_t meshPrimitiveId = 0;
         for (size_t i = 0; i < data->meshes_count; i++) {
             cgltf_mesh &mesh = data->meshes[i];
 
             for (size_t prim_i = 0; prim_i < mesh.primitives_count; prim_i++) {
                 cgltf_primitive &primitive = mesh.primitives[prim_i];
 
-                MeshPrimitive meshPrimitive;
+                GltfMeshPrimitive meshPrimitive;
+                meshPrimitive.id = meshPrimitiveId++;
+
+                if (primitive.indices) {
+                    cgltf_accessor &accessor = *primitive.indices;
+                    meshPrimitive.indices.resize(accessor.count);
+
+                    cgltf_buffer_view &bufferView = *accessor.buffer_view;
+                    size_t offset = accessor.offset + bufferView.offset;
+                    const uint8_t *bufferData = static_cast<uint8_t *>(bufferView.buffer->data) + offset;
+
+                    switch (cgltf_component_size(accessor.component_type)) {
+                        case 4: {
+                            for (size_t index = 0; index < accessor.count; index++) {
+                                meshPrimitive.indices[index] = reinterpret_cast<const uint32_t *>(bufferData)[index];
+                            }
+                            break;
+                        }
+                        case 2: {
+                            for (size_t index = 0; index < accessor.count; index++) {
+                                meshPrimitive.indices[index] = reinterpret_cast<const uint16_t *>(bufferData)[index];
+                            }
+                            break;
+                        }
+                        case 1: {
+                            for (size_t index = 0; index < accessor.count; index++) {
+                                meshPrimitive.indices[index] = reinterpret_cast<const uint8_t *>(bufferData)[index];
+                            }
+                            break;
+                        }
+                        default:
+                            spdlog::error("invalid primitive index component type");
+                            break;
+                    }
+                }
 
                 for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
                     cgltf_attribute &attribute = primitive.attributes[attr_i];
-                    cgltf_accessor &accessor = *attribute.data;
 
-                    uint32_t bufferIndex = accessor.buffer_view - data->buffer_views;
-                    int offset = static_cast<int>(accessor.offset);
+                    cgltf_accessor &accessor = *attribute.data;
+                    cgltf_buffer_view &bufferView = *accessor.buffer_view;
+                    size_t offset = accessor.offset + bufferView.offset;
+                    const uint8_t *bufferData = static_cast<uint8_t *>(bufferView.buffer->data) + offset;
 
                     switch (attribute.type) {
-                        case cgltf_attribute_type_position: { // float3
-                            meshPrimitive.positionBufferHandle = buffers[bufferIndex];
-                            meshPrimitive.positionOffset = offset;
-                            meshPrimitive.vertexCount = accessor.count;
+                        case cgltf_attribute_type_position: { // float3, convert to vec of float4
+                            meshPrimitive.positions.resize(accessor.count);
+                            const float* positionBuffer = reinterpret_cast<const float*>(bufferData);
+
+                            for (size_t pos_i = 0; pos_i < accessor.count; pos_i++) {
+                                const float* pos = positionBuffer + pos_i * 3;
+                                meshPrimitive.positions[pos_i] = glm::vec4(pos[0], pos[1], pos[2], 1.f);
+                            }
                             break;
                         }
-                        case cgltf_attribute_type_normal: { // float3
-                            meshPrimitive.normalBufferHandle = buffers[bufferIndex];
-                            meshPrimitive.normalOffset = offset;
+                        case cgltf_attribute_type_normal: { // float3, convert to vec of float4
+                            meshPrimitive.normals.resize(accessor.count);
+                            const float* normalBuffer = reinterpret_cast<const float*>(bufferData);
+
+                            for (size_t normal_i = 0; normal_i < accessor.count; normal_i++) {
+                                const float* normal = normalBuffer + normal_i * 3;
+                                meshPrimitive.normals[normal_i] = glm::vec4(normal[0], normal[1], normal[2], 1.f);
+                            }
                             break;
                         }
-                        case cgltf_attribute_type_texcoord: { // assume float2 todo: other types, multiple texcoords?
-                            meshPrimitive.texcoordBufferHandle = buffers[bufferIndex];
-                            meshPrimitive.texcoordOffset = offset;
+                        case cgltf_attribute_type_texcoord: { // assume float2
+                            meshPrimitive.uvs.resize(accessor.count);
+                            memcpy(meshPrimitive.uvs.data(), bufferData, accessor.count * sizeof(glm::vec2));
+                            break;
                         }
                         case cgltf_attribute_type_tangent: {
-                            // todo
+                            //todo
                             break;
                         }
-                            //todo: handle other attrs
+                            // todo: handle weights and joints stuff for skinning
                         default:
                             break;
                     }
@@ -225,6 +255,10 @@ namespace Flare {
                 nodes[i].mesh = &meshes[node.mesh - data->meshes];
             }
 
+            if (node.skin) {
+                nodes[i].skin = node.skin - data->skins; // todo
+            }
+
             for (size_t child_i = 0; child_i < node.children_count; child_i++) {
                 nodes[i].children.push_back(&nodes[node.children[child_i] - data->nodes]);
                 nodes[child_i].parent = &nodes[i];
@@ -238,10 +272,16 @@ namespace Flare {
             // todo: skins
         }
 
-        for (const auto &node: nodes) {
+        std::unordered_map<uint32_t, std::vector<MeshDraw>> meshDrawsMap;
+        for (auto &node: nodes) {
             if (!node.parent) {
                 topLevelNodes.push_back(&node);
+                generateMeshDrawsFromNode(&node, meshDrawsMap);
             }
+        }
+
+        for (const auto &pair: meshDrawsMap) {
+            meshDraws.insert(meshDraws.end(), pair.second.begin(), pair.second.end());
         }
     }
 
@@ -253,16 +293,52 @@ namespace Flare {
         for (auto &handle: textures) {
             gpu->destroyTexture(handle);
         }
-        for (auto &handle: buffers) {
-            gpu->destroyBuffer(handle);
-        }
         for (auto &handle: samplers) {
             gpu->destroySampler(handle);
         }
     }
 
-    void GltfScene::prepareDraws() {
+    void GltfScene::generateMeshDrawsFromNode(Node *node, std::unordered_map<uint32_t, std::vector<MeshDraw>> &map) {
+        node->updateWorldTransform();
 
+        if (node->mesh) {
+            for (const auto &meshPrim: node->mesh->meshPrimitives) {
+                MeshDraw meshDraw;
+                meshDraw.transformOffset = transforms.size();
+                transforms.push_back(node->worldTransform);
+
+                //todo: material
+
+                if (!map.contains(meshPrim.id)) {
+                    meshDraw.indexCount = meshPrim.indices.size();
+
+                    meshDraw.indexOffset = indices.size();
+                    indices.insert(indices.end(), meshPrim.indices.begin(), meshPrim.indices.end());
+
+                    meshDraw.positionOffset = positions.size();
+                    positions.insert(positions.end(), meshPrim.positions.begin(), meshPrim.positions.end());
+
+                    meshDraw.normalOffset = normals.size();
+                    normals.insert(normals.end(), meshPrim.normals.begin(), meshPrim.normals.end());
+
+                    meshDraw.uvOffset = uvs.size();
+                    uvs.insert(uvs.end(), meshPrim.uvs.begin(), meshPrim.uvs.end());
+
+                    map.insert({meshPrim.id, {meshDraw}});
+                } else { // reuse values from mesh primitive with same id //todo: skinned mesh with different offsets
+                    meshDraw.indexCount = meshPrim.indices.size();
+                    meshDraw.indexOffset = map.at(meshPrim.id).back().indexOffset;
+                    meshDraw.positionOffset = map.at(meshPrim.id).back().positionOffset;
+                    meshDraw.normalOffset = map.at(meshPrim.id).back().normalOffset;
+                    meshDraw.uvOffset = map.at(meshPrim.id).back().uvOffset;
+
+                    map.at(meshPrim.id).push_back(meshDraw);
+                }
+            }
+        }
+        for (const auto &child: node->children) {
+            generateMeshDrawsFromNode(child, map);
+        }
     }
 
     glm::mat4 Node::getLocalTransform() const {
@@ -271,5 +347,13 @@ namespace Flare {
         glm::mat4 S = glm::scale(glm::mat4(1.f), scale);
 
         return T * R * S * matrix;
+    }
+
+    void Node::updateWorldTransform() {
+        if (parent) {
+            worldTransform = parent->worldTransform * getLocalTransform();
+        } else {
+            worldTransform = getLocalTransform();
+        }
     }
 }

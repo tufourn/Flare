@@ -109,13 +109,6 @@ struct TriangleApp : Application {
                         .data = (void *) vertices.data(),
                 }
         );
-//
-//        asyncLoader.uploadRequests.emplace_back(
-//                UploadRequest{
-//                        .dstBuffer = uniformBufferHandle,
-//                        .data = (void *) &uniform,
-//                }
-//        );
 
         Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
 
@@ -144,10 +137,7 @@ struct TriangleApp : Application {
                 .layout = pipeline->descriptorSetLayoutHandles[0],
         };
 
-        descSetCI
-                .addBuffer(uniformBufferHandle, 0)
-                .addTexture(textureHandle, 1)
-                .addSampler(gpu.defaultSampler, 2);
+        descSetCI.addBuffer(uniformBufferHandle, 0);
 
         descriptorSetHandle = gpu.createDescriptorSet(descSetCI);
     }
@@ -215,9 +205,12 @@ struct TriangleApp : Application {
                 DescriptorSet *descSet = gpu.descriptorSets.get(descriptorSetHandle);
                 VkDescriptorSet vkDescSet = descSet->descriptorSet;
 
-                uint32_t offset = 0;
-                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipelineLayout, 0, 1,
-                                        &vkDescSet, 1, &offset);
+                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, BINDLESS_SET, 1,
+                                        &gpu.descriptorSets.get(gpu.bindlessDescriptorSetHandle)->descriptorSet, 0,
+                                        nullptr);
+
+                vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipelineLayout, 1, 1,
+                                        &vkDescSet, 0, nullptr);
 
                 VkViewport viewport = {
                         .x = 0.f,

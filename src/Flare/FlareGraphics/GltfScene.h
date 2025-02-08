@@ -11,63 +11,81 @@
 namespace Flare {
     struct AsyncLoader;
 
+    struct MeshDraw {
+        uint32_t indexCount = 0;
+        int32_t indexOffset = -1;
+        int32_t positionOffset = -1;
+        int32_t transformOffset = -1;
+        int32_t normalOffset = -1;
+        int32_t tangentOffset = -1; // bitangent?
+        int32_t uvOffset = -1;
+    };
+
+    struct SkinData { // todo
+        int32_t positionOffset = -1;
+    };
+
     struct PBRMaterial {
         glm::vec4 baseColorFactor;
 
-        int baseTextureOffset = -1;
-        int metallicRoughnessTextureOffset = -1;
-        int normalTextureOffset = -1;
-        int occlusionTextureOffset = -1;
-        int emissiveTextureOffset = -1;
+        int32_t baseTextureOffset = -1;
+        int32_t metallicRoughnessTextureOffset = -1;
+        int32_t normalTextureOffset = -1;
+        int32_t occlusionTextureOffset = -1;
+        int32_t emissiveTextureOffset = -1;
 
         float metallicFactor = 1.f;
         float roughnessFactor = 1.f;
-
     };
 
-    struct MeshPrimitive {
-        Handle<Buffer> indexBufferHandle;
-        int indexOffset = -1;
-
-        Handle<Buffer> positionBufferHandle;
-        int positionOffset = -1;
-
-        Handle<Buffer> normalBufferHandle;
-        int normalOffset = -1;
-
-        Handle<Buffer> texcoordBufferHandle;
-        int texcoordOffset = -1;
-
-        uint32_t vertexCount = 0;
+    struct GltfMeshPrimitive {
+        uint32_t id;
+        std::vector<glm::vec4> positions;
+        std::vector<uint32_t> indices;
+        std::vector<glm::vec4> normals;
+        std::vector<glm::vec2> uvs;
     };
 
-    struct Mesh {
-        std::vector<MeshPrimitive> meshPrimitives;
+    struct GltfMesh {
+        std::vector<GltfMeshPrimitive> meshPrimitives;
     };
 
     struct Node {
         Node *parent = nullptr;
         std::vector<Node *> children;
 
-        Mesh *mesh = nullptr;
+        GltfMesh *mesh = nullptr;
+
+        glm::mat4 worldTransform = glm::mat4(1.f);
 
         glm::mat4 matrix = glm::mat4(1.f);
         glm::vec3 translation;
         glm::quat rotation;
         glm::vec3 scale;
 
+        int skin = -1; //todo
+
         glm::mat4 getLocalTransform() const;
+
+        void updateWorldTransform();
     };
 
     struct GltfScene {
-        std::vector<Handle<Buffer>> buffers;
         std::vector<Handle<Texture>> textures;
         std::vector<Handle<Sampler>> samplers;
 
         std::vector<Node> nodes;
         std::vector<const Node *> topLevelNodes;
-        std::vector<Mesh> meshes;
+        std::vector<GltfMesh> meshes;
         std::vector<PBRMaterial> materials;
+
+        std::vector<glm::vec4> positions;
+        std::vector<uint32_t> indices;
+        std::vector<glm::vec2> uvs;
+        std::vector<glm::vec4> normals;
+        std::vector<glm::mat4> transforms;
+
+        std::vector<MeshDraw> meshDraws;
 
         GpuDevice *gpu = nullptr;
         cgltf_data *data = nullptr;
@@ -76,6 +94,6 @@ namespace Flare {
 
         void shutdown();
 
-        void prepareDraws();
+        void generateMeshDrawsFromNode(Node *node, std::unordered_map<uint32_t, std::vector<MeshDraw>> &map);
     };
 }

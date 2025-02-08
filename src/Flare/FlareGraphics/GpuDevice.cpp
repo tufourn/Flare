@@ -350,7 +350,7 @@ namespace Flare {
         vkGetDeviceQueue(device, transferFamily, 0, &transferQueue);
 
         // vma
-        VmaVulkanFunctions vmaFunctions{
+        VmaVulkanFunctions vmaFunctions = {
                 .vkGetPhysicalDeviceProperties       = vkGetPhysicalDeviceProperties,
                 .vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties,
                 .vkAllocateMemory                    = vkAllocateMemory,
@@ -370,8 +370,8 @@ namespace Flare {
                 .vkCmdCopyBuffer                     = vkCmdCopyBuffer,
         };
 
-        VmaAllocatorCreateInfo allocatorCI{
-                .flags = 0,
+        VmaAllocatorCreateInfo allocatorCI = {
+                .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
                 .physicalDevice = physicalDevice,
                 .device = device,
                 .pVulkanFunctions = &vmaFunctions,
@@ -785,11 +785,11 @@ namespace Flare {
                 continue;
             }
 
-            std::vector<VkDescriptorSetLayoutBinding> *bindings = &set.second;
+            std::vector<VkDescriptorSetLayoutBinding> &bindings = set.second;
 
             DescriptorSetLayoutCI descriptorSetLayoutCI = {
-                    .bindings = bindings->data(),
-                    .bindingCount = bindings->size(),
+                    .bindings = bindings.data(),
+                    .bindingCount = bindings.size(),
             };
 
             Handle<DescriptorSetLayout> descriptorSetLayoutHandle = createDescriptorSetLayout(
@@ -1053,7 +1053,7 @@ namespace Flare {
 
                 spdlog::info("{} shader: Found UBO {} at set = {}, binding = {}",
                              stageString, uniform.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, model.stage);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, model.stage);
             }
 
             for (auto &image: res.separate_images) {
@@ -1081,6 +1081,15 @@ namespace Flare {
                 spdlog::info("{} shader: Found combined image sampler {} at set = {}, binding = {}",
                              stageString, sampledImage.name, set, binding);
                 reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, model.stage);
+            }
+
+            for (auto &storageBuffer : res.storage_buffers) {
+                uint32_t set = comp.get_decoration(storageBuffer.id, spv::DecorationDescriptorSet);
+
+                uint32_t binding = comp.get_decoration(storageBuffer.id, spv::DecorationBinding);
+                spdlog::info("{} shader: Found SSBO {} at set = {}, binding = {}",
+                             stageString, storageBuffer.name, set, binding);
+                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, model.stage);
             }
         }
     }
@@ -1533,6 +1542,8 @@ namespace Flare {
 
             switch (layoutBinding.descriptorType) {
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
                 case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: {
                     Handle<Buffer> bufferHandle = ci.buffers[i];
                     Buffer *buffer = buffers.get(bufferHandle);

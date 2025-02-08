@@ -1,10 +1,11 @@
+[[vk::binding(10,0)]]
+Sampler2D<float4> globalTextures[];
+
+[[vk::binding(0,1)]]
 cbuffer Uniforms
 {
     float4x4 mvp;
 }
-
-Texture2D<float4> texture;
-SamplerState sampler;
 
 struct VertexIn
 {
@@ -43,7 +44,7 @@ Fragment main(
     float2 uv : TEXCOORD0) : SV_Target
 {
     Fragment output;
-    output.color = texture.Sample(sampler, uv);
+    output.color = globalTextures[1].Sample(uv);
 
     return output;
 }
