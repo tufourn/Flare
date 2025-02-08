@@ -29,7 +29,7 @@ struct Fragment
 [shader("vertex")]
 VertexOut main(VertexIn input) {
     VertexOut output;
-    output.sv_position = mul(mvp, mul(transforms[0], positions[input.vertexIndex]));
+    output.sv_position = mul(transpose(mvp), mul(transpose(transforms[0]), positions[input.vertexIndex]));
     output.uv = uvs[input.vertexIndex];
 
     return output;

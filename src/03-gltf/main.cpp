@@ -1,5 +1,6 @@
 #include "FlareApp/Application.h"
 #include "FlareApp/Window.h"
+#include "FlareApp/Camera.h"
 #include "FlareGraphics/GpuDevice.h"
 #include "FlareGraphics/ShaderCompiler.h"
 #include <glm/glm.hpp>
@@ -52,8 +53,8 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
-//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 
         BufferCI uniformBufferCI = {
                 .size = sizeof(Uniform),
@@ -135,14 +136,25 @@ struct TriangleApp : Application {
                 .addBuffer(uniformBufferHandle, 3);
 
         descriptorSetHandle = gpu.createDescriptorSet(descCI);
+
+        glfwSetWindowUserPointer(window.glfwWindow, &camera);
+        glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
+        glfwSetKeyCallback(window.glfwWindow, Camera::keyCallback);
+        glfwSetMouseButtonCallback(window.glfwWindow, Camera::mouseButtonCallback);
     }
 
     void loop() override {
         while (!window.shouldClose()) {
             window.pollEvents();
 
-            uniform.mvp = glm::rotate(glm::mat4(1.f), static_cast<float>(gpu.absoluteFrame / 10000.f),
-                                      glm::vec3(0.0f, 1.0f, 0.0f));
+            camera.update();
+
+            glm::mat4 view = camera.getViewMatrix();
+            glm::mat4 projection = glm::perspective(glm::radians(45.f),
+                                                    static_cast<float>(window.width) / window.height, 0.001f, 1e9f);
+            projection[1][1] *= -1;
+            uniform.mvp = projection * view;
+
             asyncLoader.uploadRequests.emplace_back(
                     UploadRequest{
                             .dstBuffer = uniformBufferHandle,
@@ -269,6 +281,8 @@ struct TriangleApp : Application {
     Handle<Buffer> meshDrawHandle;
 
     Handle<DescriptorSet> descriptorSetHandle;
+
+    Camera camera;
 
     GltfScene gltf;
 };

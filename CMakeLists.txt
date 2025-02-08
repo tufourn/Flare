@@ -132,6 +132,8 @@ add_library(FlareApp
         src/Flare/FlareApp/Window.h
         src/Flare/FlareApp/Application.cpp
         src/Flare/FlareApp/Application.h
+        src/Flare/FlareApp/Camera.cpp
+        src/Flare/FlareApp/Camera.h
 )
 target_link_libraries(FlareApp PRIVATE
         FlareExternal
