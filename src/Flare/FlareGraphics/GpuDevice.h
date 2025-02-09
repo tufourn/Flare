@@ -99,6 +99,7 @@ namespace Flare {
         std::vector<VkPresentModeKHR> presentModes;
         std::vector<VkImage> swapchainImages;
         std::vector<VkImageView> swapchainImageViews;
+        std::vector<Handle<Texture>> depthTextures;
         uint32_t swapchainImageIndex = 0;
         bool resized = false;
 

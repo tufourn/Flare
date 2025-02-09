@@ -703,9 +703,19 @@ namespace Flare {
         }
 
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
+        depthTextures.resize(imageCount);
         swapchainImageViews.resize(imageCount);
         swapchainImages.resize(imageCount);
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
+
+        TextureCI depthTextureCI = {
+                .width = static_cast<uint16_t>(swapchainExtent.width),
+                .height = static_cast<uint16_t>(swapchainExtent.height),
+                .depth = 1,
+                .format = VK_FORMAT_D32_SFLOAT,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        };
 
         for (size_t i = 0; i < imageCount; i++) {
             VkImageViewCreateInfo imageViewCI{
@@ -722,12 +732,15 @@ namespace Flare {
             if (vkCreateImageView(device, &imageViewCI, nullptr, &swapchainImageViews[i]) != VK_SUCCESS) {
                 spdlog::error("GpuDevice: Failed to create swapchain image view");
             }
+
+            depthTextures[i] = createTexture(depthTextureCI);
         }
     }
 
     void GpuDevice::destroySwapchain() {
-        for (const auto &imageView: swapchainImageViews) {
-            vkDestroyImageView(device, imageView, nullptr);
+        for (size_t i = 0; i < swapchainImageViews.size(); i++) {
+            vkDestroyImageView(device, swapchainImageViews[i], nullptr);
+            destroyTexture(depthTextures[i]);
         }
         vkDestroySwapchainKHR(device, swapchain, nullptr);
     }
@@ -1083,7 +1096,7 @@ namespace Flare {
                 reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, model.stage);
             }
 
-            for (auto &storageBuffer : res.storage_buffers) {
+            for (auto &storageBuffer: res.storage_buffers) {
                 uint32_t set = comp.get_decoration(storageBuffer.id, spv::DecorationDescriptorSet);
 
                 uint32_t binding = comp.get_decoration(storageBuffer.id, spv::DecorationBinding);

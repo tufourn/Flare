@@ -38,7 +38,7 @@ VertexOut main(VertexIn input) {
 [shader("fragment")]
 Fragment main(float2 uv : TEXCOORD0) : SV_Target {
     Fragment output;
-    output.color = globalTextures[1].Sample(uv);
+    output.color = globalTextures[4].Sample(uv);
 
     return output;
 }

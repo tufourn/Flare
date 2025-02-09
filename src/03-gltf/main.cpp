@@ -3,6 +3,7 @@
 #include "FlareApp/Camera.h"
 #include "FlareGraphics/GpuDevice.h"
 #include "FlareGraphics/ShaderCompiler.h"
+
 #include <glm/glm.hpp>
 
 #include "FlareGraphics/VkHelper.h"
@@ -50,6 +51,12 @@ struct TriangleApp : Application {
         PipelineCI pipelineCI;
         pipelineCI.shaderStages.addBinary({execModels, shader});
         pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
+        pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
+        pipelineCI.depthStencil = {
+                .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+                .depthTestEnable = true,
+                .depthWriteEnable = true,
+        };
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
@@ -150,7 +157,7 @@ struct TriangleApp : Application {
             camera.update();
 
             glm::mat4 view = camera.getViewMatrix();
-            glm::mat4 projection = glm::perspective(glm::radians(45.f),
+            glm::mat4 projection = glm::perspectiveZO(glm::radians(45.f),
                                                     static_cast<float>(window.width) / window.height, 0.001f, 1e9f);
             projection[1][1] *= -1;
             uniform.mvp = projection * view;
@@ -187,6 +194,20 @@ struct TriangleApp : Application {
                         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 };
 
+                VkRenderingAttachmentInfo depthAttachment = {
+                        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                        .pNext = nullptr,
+                        .imageView = gpu.textures.get(gpu.depthTextures[gpu.swapchainImageIndex])->imageView,
+                        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                        .clearValue = {
+                                .depthStencil = {
+                                        .depth = 1.f,
+                                },
+                        },
+                };
+
                 VkRenderingInfo renderingInfo = {
                         .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
                         .pNext = nullptr,
@@ -196,7 +217,7 @@ struct TriangleApp : Application {
                         .viewMask = 0,
                         .colorAttachmentCount = 1,
                         .pColorAttachments = &colorAttachment,
-                        .pDepthAttachment = nullptr,
+                        .pDepthAttachment = &depthAttachment,
                         .pStencilAttachment = nullptr,
                 };
 

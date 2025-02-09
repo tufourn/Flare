@@ -126,6 +126,7 @@ target_include_directories(FlareExternal INTERFACE
         ${cgltf_SOURCE_DIR}
         ${spirv-cross_SOURCE_DIR}
 )
+target_compile_definitions(FlareExternal INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
 add_library(FlareApp
         src/Flare/FlareApp/Window.cpp

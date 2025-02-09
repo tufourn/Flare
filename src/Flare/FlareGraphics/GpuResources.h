@@ -100,24 +100,8 @@ namespace Flare {
     };
 
     struct DepthStencilCI {
-        VkStencilOpState front = {
-                .failOp = VK_STENCIL_OP_KEEP,
-                .passOp = VK_STENCIL_OP_KEEP,
-                .depthFailOp = VK_STENCIL_OP_KEEP,
-                .compareOp = VK_COMPARE_OP_ALWAYS,
-                .compareMask = 0xFF,
-                .writeMask = 0xFF,
-                .reference = 0xFF,
-        };
-        VkStencilOpState back = {
-                .failOp = VK_STENCIL_OP_KEEP,
-                .passOp = VK_STENCIL_OP_KEEP,
-                .depthFailOp = VK_STENCIL_OP_KEEP,
-                .compareOp = VK_COMPARE_OP_ALWAYS,
-                .compareMask = 0xFF,
-                .writeMask = 0xFF,
-                .reference = 0xFF,
-        };
+        VkStencilOpState front = {};
+        VkStencilOpState back = {};
         VkCompareOp depthCompareOp = VK_COMPARE_OP_ALWAYS;
         bool depthTestEnable = false;
         bool depthWriteEnable = false;
