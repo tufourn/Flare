@@ -11,7 +11,6 @@
 #include <algorithm>
 #include <spirv_cross.hpp>
 #include <cgltf.h>
-#include <stb_image.h>
 
 #include "VkHelper.h"
 

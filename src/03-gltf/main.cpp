@@ -22,6 +22,11 @@ struct TriangleApp : Application {
             .mvp = glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(0.0f, 0.0f, 1.0f))
     };
 
+    struct IndirectCommand {
+        VkDrawIndexedIndirectCommand cmd;
+        uint32_t objectId;
+    };
+
     void init(const ApplicationConfig &appConfig) override {
         WindowConfig windowConfig{};
         windowConfig
@@ -60,8 +65,8 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
-        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 
         BufferCI uniformBufferCI = {
                 .size = sizeof(Uniform),
@@ -119,18 +124,6 @@ struct TriangleApp : Application {
                 }
         );
 
-        BufferCI meshDrawCI = {
-                .size = sizeof(MeshDraw) * gltf.meshDraws.size(),
-                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        };
-        meshDrawHandle = gpu.createBuffer(meshDrawCI);
-//        asyncLoader.uploadRequests.emplace_back(
-//                UploadRequest{
-//                        .dstBuffer = meshDrawHandle,
-//                        .data = (void *) gltf.meshDraws.data(),
-//                }
-//        );
-
         Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
 
         DescriptorSetCI descCI = {
@@ -152,7 +145,7 @@ struct TriangleApp : Application {
 
     void loop() override {
         while (!window.shouldClose()) {
-            window.pollEvents();
+            window.newFrame();
 
             camera.update();
 
@@ -265,6 +258,7 @@ struct TriangleApp : Application {
                 vkEndCommandBuffer(cmd);
 
                 gpu.present();
+//                spdlog::info("{}", gpu.absoluteFrame);
             }
         }
     }
@@ -279,7 +273,6 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(indexBufferHandle);
         gpu.destroyBuffer(transformBufferHandle);
         gpu.destroyBuffer(uvBufferHandle);
-        gpu.destroyBuffer(meshDrawHandle);
         gpu.destroyBuffer(uniformBufferHandle);
 
         asyncLoader.shutdown();
@@ -299,7 +292,6 @@ struct TriangleApp : Application {
     Handle<Buffer> indexBufferHandle;
     Handle<Buffer> transformBufferHandle;
     Handle<Buffer> uvBufferHandle;
-    Handle<Buffer> meshDrawHandle;
 
     Handle<DescriptorSet> descriptorSetHandle;
 

@@ -65,33 +65,26 @@ namespace Flare {
         if (action == GLFW_PRESS) {
             switch (key) {
                 case GLFW_KEY_R: // reset camera
-                    spdlog::info("R");
                     position = glm::vec3(0.f, 0.f, 5.f);
                     pitch = 0.f;
                     yaw = 0.f;
                     break;
                 case GLFW_KEY_W:
-                    spdlog::info("W");
                     velocity.z = -1;
                     break;
                 case GLFW_KEY_S:
-                    spdlog::info("S");
                     velocity.z = 1;
                     break;
                 case GLFW_KEY_A:
-                    spdlog::info("A");
                     velocity.x = -1;
                     break;
                 case GLFW_KEY_D:
-                    spdlog::info("D");
                     velocity.x = 1;
                     break;
                 case GLFW_KEY_SPACE:
-                    spdlog::info("SPACE");
                     velocity.y = 1;
                     break;
                 case GLFW_KEY_LEFT_CONTROL:
-                    spdlog::info("CTRL");
                     velocity.y = -1;
                     break;
                 default:

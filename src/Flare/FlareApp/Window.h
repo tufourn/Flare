@@ -33,15 +33,18 @@ namespace Flare {
 
         void shutdown();
 
-        void pollEvents() const { glfwPollEvents(); }
+        void newFrame() {
+            glfwPollEvents();
+            glfwGetWindowSize(glfwWindow, &width, &height);
+        }
 
         bool shouldClose() const { return glfwWindowShouldClose(glfwWindow); }
 
         bool isMinimized() const { return glfwGetWindowAttrib(glfwWindow, GLFW_ICONIFIED); }
 
         GLFWwindow *glfwWindow = nullptr;
-        uint32_t width = 0;
-        uint32_t height = 0;
+        int width = 0;
+        int height = 0;
     };
 }
 
