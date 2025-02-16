@@ -8,12 +8,16 @@
 #include "GpuResources.h"
 
 namespace Flare {
+    constexpr uint32_t SPIRV_MAGIC_NUMBER = 0x07230203;
+
     struct ShaderCompiler {
         void init();
 
         void shutdown();
 
-        std::vector<uint32_t> compile(const std::filesystem::path &path);
+        std::vector<uint32_t> compileSlang(const std::filesystem::path &path);
+
+        static std::vector<uint32_t> compileGLSL(const std::filesystem::path &path);
 
         void diagnose(slang::IBlob *diagnosticsBlob);
 

@@ -1,7 +1,9 @@
 #include "ShaderCompiler.h"
 #include <spdlog/spdlog.h>
+#include <shaderc/shaderc.hpp>
 
 #include <array>
+#include <fstream>
 
 namespace Flare {
     void ShaderCompiler::init() {
@@ -12,7 +14,7 @@ namespace Flare {
 
     }
 
-    std::vector<uint32_t> ShaderCompiler::compile(const std::filesystem::path &path) {
+    std::vector<uint32_t> ShaderCompiler::compileSlang(const std::filesystem::path &path) {
         if (!std::filesystem::exists(path)) {
             spdlog::error("ShaderCompiler: {} doesn't exist", path.string());
             return {};
@@ -111,8 +113,7 @@ namespace Flare {
 
         auto *spirvBinary = (uint32_t *) spirvCode->getBufferPointer();
 
-        auto magicNumber = spirvBinary[0];
-        assert(magicNumber == 0x07230203);
+        assert(spirvBinary[0] == SPIRV_MAGIC_NUMBER);
 
         return {spirvBinary, spirvBinary + spirvCode->getBufferSize() / sizeof(uint32_t)};
     }
@@ -122,5 +123,52 @@ namespace Flare {
             const char *msg = static_cast<const char *>(diagnosticsBlob->getBufferPointer());
             spdlog::error("ShaderCompiler: {}", msg);
         }
+    }
+
+    std::vector<uint32_t> ShaderCompiler::compileGLSL(const std::filesystem::path &path) {
+        shaderc::Compiler compiler;
+        shaderc::CompileOptions options;
+
+        std::ifstream shaderFile(path);
+        if (!shaderFile.is_open()) {
+            spdlog::error("Failed to open {}", path.string());
+            return {};
+        }
+
+        std::stringstream buf;
+        buf << shaderFile.rdbuf();
+        std::string shaderCode = buf.str();
+
+        shaderFile.close();
+
+        shaderc_shader_kind shaderKind;
+        if (path.extension() == ".vert") {
+            shaderKind = shaderc_glsl_vertex_shader;
+        } else if (path.extension() == ".frag") {
+            shaderKind = shaderc_glsl_fragment_shader;
+        } else if (path.extension() == ".comp") {
+            shaderKind = shaderc_glsl_compute_shader;
+        } else {
+            spdlog::error("Unsupported glsl shader type");
+            return {};
+        }
+
+        shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(shaderCode, shaderKind,
+                                                                         path.string().c_str(), options);
+
+        if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
+            spdlog::error("Shader compilation failed: {}", result.GetErrorMessage());
+            return {};
+        }
+
+        std::vector<uint32_t> spirv;
+        spirv.assign(result.cbegin(), result.cend());
+
+        assert(spirv[0] == SPIRV_MAGIC_NUMBER);
+
+        spdlog::info("ShaderCompiler: Compiled {} with {} bytes of data",
+                     path.string(), spirv.size() * sizeof(uint32_t));
+
+        return spirv;
     }
 }

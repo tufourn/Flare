@@ -15,22 +15,36 @@ struct GLFWwindow;
 namespace Flare {
     static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
 
-    static constexpr uint32_t BINDLESS_SET = 0;
-    static constexpr uint32_t BINDLESS_TEXTURE_BINDING = 10;
-    static constexpr uint32_t MAX_BINDLESS_RESOURCES = 1024;
+    static constexpr uint32_t STORAGE_BUFFERS_SET = 0;
+    static constexpr uint32_t SAMPLED_IMAGES_SET = 1;
+    static constexpr uint32_t STORAGE_IMAGES_SET = 2;
+    static constexpr uint32_t SAMPLERS_SET = 3;
+    static constexpr uint32_t ACCEL_STRUCT_SET = 4;
+
+    struct PushConstants {
+        uint32_t bindingsOffset;
+        uint32_t data0;
+    };
 
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
-        uint32_t descriptorSetLayouts = 256;
         uint32_t buffers = 256;
         uint32_t textures = 256;
         uint32_t samplers = 256;
-        uint32_t descriptorSets = 4096;
+    };
+
+    struct BindlessSetup {
+        uint32_t storageBuffers = 512 * 1024;
+        uint32_t sampledImages = 512 * 1024;
+        uint32_t storageImages = 64 * 1024;
+        uint32_t accelStructs = 32 * 1024;
+        uint32_t samplers = 4 * 1024;
     };
 
     struct GpuDeviceCreateInfo {
         GLFWwindow *glfwWindow = nullptr;
         ResourcePoolCI resourcePoolCI;
+        BindlessSetup bindlessSetup;
     };
 
     struct GpuDevice {
@@ -67,10 +81,6 @@ namespace Flare {
 
         void destroyPipeline(Handle<Pipeline> handle);
 
-        Handle<DescriptorSetLayout> createDescriptorSetLayout(const DescriptorSetLayoutCI &ci);
-
-        void destroyDescriptorSetLayout(Handle<DescriptorSetLayout> handle);
-
         Handle<Buffer> createBuffer(const BufferCI &ci);
 
         void destroyBuffer(Handle<Buffer> handle);
@@ -83,7 +93,9 @@ namespace Flare {
 
         void destroySampler(Handle<Sampler> handle);
 
-        Handle<DescriptorSet> createDescriptorSet(const DescriptorSetCI &ci);
+        void createBindlessDescriptorSets(const GpuDeviceCreateInfo& ci);
+
+        void destroyBindlessDescriptorSets();
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
@@ -127,22 +139,18 @@ namespace Flare {
         uint32_t computeFamily;
         uint32_t transferFamily;
 
-        VmaAllocator allocator;
-
-        VkDescriptorPool descriptorPool;
         VkDescriptorPool bindlessDescriptorPool;
-        Handle<DescriptorSetLayout> bindlessDescriptorSetLayoutHandle;
-        Handle<DescriptorSet> bindlessDescriptorSetHandle;
-        std::vector<Handle<Texture>> bindlessTextureUpdates;
+        std::array<VkDescriptorSetLayout, 5> bindlessDescriptorSetLayouts;
+        std::array<VkDescriptorSet, 5> bindlessDescriptorSets;
+
+        VmaAllocator allocator;
 
         Handle<Sampler> defaultSampler;
         Handle<Texture> defaultTexture;
 
         ResourcePool<Pipeline> pipelines;
-        ResourcePool<DescriptorSetLayout> descriptorSetLayouts;
         ResourcePool<Buffer> buffers;
         ResourcePool<Texture> textures;
         ResourcePool<Sampler> samplers;
-        ResourcePool<DescriptorSet> descriptorSets;
     };
 }

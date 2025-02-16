@@ -14,17 +14,22 @@
 using namespace Flare;
 
 struct TriangleApp : Application {
-    struct Uniform {
+    struct Globals {
         glm::mat4 mvp;
     };
 
-    Uniform uniform = {
+    Globals globals = {
             .mvp = glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(0.0f, 0.0f, 1.0f))
     };
 
-    struct IndirectCommand {
-        VkDrawIndexedIndirectCommand cmd;
-        uint32_t objectId;
+    struct GpuMeshDraw {
+        uint32_t globalBufferIndex;
+        uint32_t positionBufferIndex;
+        uint32_t uvBufferIndex;
+        uint32_t transformBufferIndex;
+
+        uint32_t transformOffset;
+        float pad[3];
     };
 
     void init(const ApplicationConfig &appConfig) override {
@@ -45,7 +50,8 @@ struct TriangleApp : Application {
 
         shaderCompiler.init();
 
-        std::vector<uint32_t> shader = shaderCompiler.compile("shaders/gltf.slang");
+        std::vector<uint32_t> shader = shaderCompiler.compileSlang("shaders/gltf.slang");
+        std::vector<uint32_t> testShader = shaderCompiler.compileGLSL("shaders/triangle.frag");
 
         Flare::ReflectOutput reflection;
         std::vector<ShaderExecModel> execModels = {
@@ -65,15 +71,14 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
-//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 
-        BufferCI uniformBufferCI = {
-                .size = sizeof(Uniform),
-                .usageFlags = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        BufferCI globalsBufferCI = {
+                .size = sizeof(Globals),
+                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         };
-
-        uniformBufferHandle = gpu.createBuffer(uniformBufferCI);
+        globalBufferHandle = gpu.createBuffer(globalsBufferCI);
 
         BufferCI positionsCI = {
                 .size = sizeof(glm::vec4) * gltf.positions.size(),
@@ -124,18 +129,30 @@ struct TriangleApp : Application {
                 }
         );
 
-        Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
-
-        DescriptorSetCI descCI = {
-                .layout = pipeline->descriptorSetLayoutHandles[0],
+        BufferCI meshDrawCI = {
+                .size = sizeof(GpuMeshDraw) * gltf.meshDraws.size(),
+                .usageFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         };
-        descCI
-                .addBuffer(positionBufferHandle, 0)
-                .addBuffer(uvBufferHandle, 1)
-                .addBuffer(transformBufferHandle, 2)
-                .addBuffer(uniformBufferHandle, 3);
 
-        descriptorSetHandle = gpu.createDescriptorSet(descCI);
+        gpuMeshDraws.reserve(gltf.meshDraws.size());
+        for (auto &meshDraw: gltf.meshDraws) {
+            gpuMeshDraws.emplace_back(GpuMeshDraw{
+                    .globalBufferIndex = globalBufferHandle.index,
+                    .positionBufferIndex = positionBufferHandle.index,
+                    .uvBufferIndex = uvBufferHandle.index,
+                    .transformBufferIndex = transformBufferHandle.index,
+
+                    .transformOffset = static_cast<uint32_t>(meshDraw.transformOffset),
+            });
+        }
+
+        meshDrawBufferHandle = gpu.createBuffer(meshDrawCI);
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = meshDrawBufferHandle,
+                        .data = (void *) gpuMeshDraws.data(),
+                }
+        );
 
         glfwSetWindowUserPointer(window.glfwWindow, &camera);
         glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
@@ -147,26 +164,31 @@ struct TriangleApp : Application {
         while (!window.shouldClose()) {
             window.newFrame();
 
-            camera.update();
-
-            glm::mat4 view = camera.getViewMatrix();
-            glm::mat4 projection = glm::perspectiveZO(glm::radians(45.f),
-                                                    static_cast<float>(window.width) / window.height, 0.001f, 1e9f);
-            projection[1][1] *= -1;
-            uniform.mvp = projection * view;
-
-            asyncLoader.uploadRequests.emplace_back(
-                    UploadRequest{
-                            .dstBuffer = uniformBufferHandle,
-                            .data = (void *) &uniform,
-                    }
-            );
-
-            while (!asyncLoader.uploadRequests.empty()) {
-                asyncLoader.update();
-            }
-
             if (!window.isMinimized()) {
+                camera.update();
+
+                glm::mat4 view = camera.getViewMatrix();
+                glm::mat4 projection = glm::perspectiveZO(glm::radians(45.f),
+                                                          static_cast<float>(window.width) / window.height, 0.001f,
+                                                          1e9f);
+                projection[1][1] *= -1;
+                globals.mvp = projection * view;
+
+                asyncLoader.uploadRequests.emplace_back(
+                        UploadRequest{
+                                .dstBuffer = globalBufferHandle,
+                                .data = (void *) &globals,
+                        }
+                );
+
+                while (!asyncLoader.uploadRequests.empty()) {
+                    asyncLoader.update();
+                }
+
+                PushConstants pc = {
+                        .bindingsOffset = meshDrawBufferHandle.index,
+                };
+
                 gpu.newFrame();
 
                 VkCommandBuffer cmd = gpu.getCommandBuffer();
@@ -220,14 +242,9 @@ struct TriangleApp : Application {
                 vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
 
                 vkCmdBindIndexBuffer(cmd, gpu.buffers.get(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
-
-                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, BINDLESS_SET, 1,
-                                        &gpu.descriptorSets.get(gpu.bindlessDescriptorSetHandle)->descriptorSet, 0,
-                                        nullptr);
-
-                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 1, 1,
-                                        &gpu.descriptorSets.get(descriptorSetHandle)->descriptorSet, 0,
-                                        nullptr);
+                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
+                                        gpu.bindlessDescriptorSets.size(), gpu.bindlessDescriptorSets.data(),
+                                        0, nullptr);
 
                 VkViewport viewport = {
                         .x = 0.f,
@@ -245,8 +262,12 @@ struct TriangleApp : Application {
                 };
                 vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-                for (const auto &md: gltf.meshDraws) {
-                    vkCmdDrawIndexed(cmd, md.indexCount, 1, md.indexOffset, md.positionOffset, 0);
+                for (size_t i = 0; i < gltf.meshDraws.size(); i++) {
+                    const MeshDraw &md = gltf.meshDraws[i];
+                    pc.data0 = i;
+                    vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
+                                       &pc);
+                    vkCmdDrawIndexed(cmd, md.indexCount, 1, md.indexOffset, md.vertexOffset, 0);
                 }
 
                 vkCmdEndRendering(cmd);
@@ -269,11 +290,12 @@ struct TriangleApp : Application {
         gltf.shutdown();
 
         gpu.destroyPipeline(pipelineHandle);
+        gpu.destroyBuffer(globalBufferHandle);
         gpu.destroyBuffer(positionBufferHandle);
         gpu.destroyBuffer(indexBufferHandle);
         gpu.destroyBuffer(transformBufferHandle);
         gpu.destroyBuffer(uvBufferHandle);
-        gpu.destroyBuffer(uniformBufferHandle);
+        gpu.destroyBuffer(meshDrawBufferHandle);
 
         asyncLoader.shutdown();
         gpu.shutdown();
@@ -287,13 +309,13 @@ struct TriangleApp : Application {
 
     Handle<Pipeline> pipelineHandle;
 
-    Handle<Buffer> uniformBufferHandle;
+    Handle<Buffer> globalBufferHandle;
     Handle<Buffer> positionBufferHandle;
     Handle<Buffer> indexBufferHandle;
     Handle<Buffer> transformBufferHandle;
     Handle<Buffer> uvBufferHandle;
-
-    Handle<DescriptorSet> descriptorSetHandle;
+    Handle<Buffer> meshDrawBufferHandle;
+    std::vector<GpuMeshDraw> gpuMeshDraws;
 
     Camera camera;
 

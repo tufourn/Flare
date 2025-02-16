@@ -102,20 +102,24 @@ namespace Flare {
             samplers[i] = gpu->createSampler(ci);
         }
 
+        gltfTextures.resize(data->textures_count);
         for (size_t i = 0; i < data->textures_count; i++) {
             cgltf_texture &gltfTexture = data->textures[i];
 
             if (gltfTexture.image) {
                 uint32_t textureIndex = gltfTexture.image - data->images;
-                Texture *texture = gpu->textures.get(textures[textureIndex]);
-
-                // technically not correct as a gltf image can be used with different samplers in different textures
+                gltfTextures[i].image = textures[textureIndex];
                 if (gltfTexture.sampler) {
                     uint32_t samplerIndex = gltfTexture.sampler - data->samplers;
-                    texture->sampler = samplers[samplerIndex];
+                    gltfTextures[i].sampler = samplers[samplerIndex];
                 } else {
-                    texture->sampler = gpu->defaultSampler;
+                    gltfTextures[i].sampler = gpu->defaultSampler;
                 }
+            } else {
+                gltfTextures[i] = {
+                        .image = gpu->defaultTexture,
+                        .sampler = gpu->defaultSampler,
+                };
             }
         }
 
@@ -210,20 +214,20 @@ namespace Flare {
                     switch (attribute.type) {
                         case cgltf_attribute_type_position: { // float3, convert to vec of float4
                             meshPrimitive.positions.resize(accessor.count);
-                            const float* positionBuffer = reinterpret_cast<const float*>(bufferData);
+                            const float *positionBuffer = reinterpret_cast<const float *>(bufferData);
 
                             for (size_t pos_i = 0; pos_i < accessor.count; pos_i++) {
-                                const float* pos = positionBuffer + pos_i * 3;
+                                const float *pos = positionBuffer + pos_i * 3;
                                 meshPrimitive.positions[pos_i] = glm::vec4(pos[0], pos[1], pos[2], 1.f);
                             }
                             break;
                         }
                         case cgltf_attribute_type_normal: { // float3, convert to vec of float4
                             meshPrimitive.normals.resize(accessor.count);
-                            const float* normalBuffer = reinterpret_cast<const float*>(bufferData);
+                            const float *normalBuffer = reinterpret_cast<const float *>(bufferData);
 
                             for (size_t normal_i = 0; normal_i < accessor.count; normal_i++) {
-                                const float* normal = normalBuffer + normal_i * 3;
+                                const float *normal = normalBuffer + normal_i * 3;
                                 meshPrimitive.normals[normal_i] = glm::vec4(normal[0], normal[1], normal[2], 1.f);
                             }
                             break;
@@ -260,8 +264,9 @@ namespace Flare {
             }
 
             for (size_t child_i = 0; child_i < node.children_count; child_i++) {
-                nodes[i].children.push_back(&nodes[node.children[child_i] - data->nodes]);
-                nodes[child_i].parent = &nodes[i];
+                size_t childIndex = node.children[child_i] - data->nodes;
+                nodes[i].children.push_back(&nodes[childIndex]);
+                nodes[childIndex].parent = &nodes[i];
             }
 
             nodes[i].translation = {node.translation[0], node.translation[1], node.translation[2]};
@@ -315,22 +320,16 @@ namespace Flare {
                     meshDraw.indexOffset = indices.size();
                     indices.insert(indices.end(), meshPrim.indices.begin(), meshPrim.indices.end());
 
-                    meshDraw.positionOffset = positions.size();
+                    meshDraw.vertexOffset = positions.size();
                     positions.insert(positions.end(), meshPrim.positions.begin(), meshPrim.positions.end());
-
-                    meshDraw.normalOffset = normals.size();
                     normals.insert(normals.end(), meshPrim.normals.begin(), meshPrim.normals.end());
-
-                    meshDraw.uvOffset = uvs.size();
                     uvs.insert(uvs.end(), meshPrim.uvs.begin(), meshPrim.uvs.end());
 
                     map.insert({meshPrim.id, {meshDraw}});
                 } else { // reuse values from mesh primitive with same id //todo: skinned mesh with different offsets
                     meshDraw.indexCount = meshPrim.indices.size();
                     meshDraw.indexOffset = map.at(meshPrim.id).back().indexOffset;
-                    meshDraw.positionOffset = map.at(meshPrim.id).back().positionOffset;
-                    meshDraw.normalOffset = map.at(meshPrim.id).back().normalOffset;
-                    meshDraw.uvOffset = map.at(meshPrim.id).back().uvOffset;
+                    meshDraw.vertexOffset = map.at(meshPrim.id).back().vertexOffset;
 
                     map.at(meshPrim.id).push_back(meshDraw);
                 }

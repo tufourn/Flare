@@ -11,14 +11,16 @@
 namespace Flare {
     struct AsyncLoader;
 
+    struct GltfTexture {
+        Handle<Texture> image;
+        Handle<Sampler> sampler;
+    };
+
     struct MeshDraw {
         uint32_t indexCount = 0;
         int32_t indexOffset = -1;
-        int32_t positionOffset = -1;
+        int32_t vertexOffset = -1;
         int32_t transformOffset = -1;
-        int32_t normalOffset = -1;
-        int32_t tangentOffset = -1; // bitangent?
-        int32_t uvOffset = -1;
     };
 
     struct SkinData { // todo
@@ -73,6 +75,7 @@ namespace Flare {
     struct GltfScene {
         std::vector<Handle<Texture>> textures;
         std::vector<Handle<Sampler>> samplers;
+        std::vector<GltfTexture> gltfTextures;
 
         std::vector<Node> nodes;
         std::vector<const Node *> topLevelNodes;

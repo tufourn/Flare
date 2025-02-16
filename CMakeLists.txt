@@ -3,6 +3,8 @@ project(Flare)
 
 set(CMAKE_CXX_STANDARD 20)
 
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
+
 include(FetchContent)
 set(FETCHCONTENT_QUIET FALSE)
 
@@ -119,6 +121,7 @@ target_link_libraries(FlareExternal INTERFACE
         spdlog
         flare-spirv-cross
         slang
+        Vulkan::shaderc_combined
 )
 target_include_directories(FlareExternal INTERFACE
         ${vma_SOURCE_DIR}/include

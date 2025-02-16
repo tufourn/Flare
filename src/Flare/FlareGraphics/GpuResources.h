@@ -145,18 +145,6 @@ namespace Flare {
         VkFormat stencilFormat = VK_FORMAT_UNDEFINED;
     };
 
-    struct DescriptorSetLayoutCI {
-        VkDescriptorSetLayoutBinding *bindings = nullptr;
-        size_t bindingCount = 0;
-        VkDescriptorSetLayoutCreateFlags flags = 0;
-        VkDescriptorSetLayoutBindingFlagsCreateInfo *bindingFlags = nullptr;
-    };
-
-    struct DescriptorSetLayout {
-        VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
-        std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings;
-    };
-
     struct PipelineCI {
         ShaderStageCI shaderStages;
         VertexInputCI vertexInput;
@@ -170,7 +158,6 @@ namespace Flare {
         VkPipeline pipeline;
         VkPipelineLayout pipelineLayout;
         VkPipelineBindPoint bindPoint;
-        std::vector<Handle<DescriptorSetLayout>> descriptorSetLayoutHandles;
     };
 
     struct BufferCI {
@@ -200,7 +187,6 @@ namespace Flare {
         VkSampler sampler;
     };
 
-
     struct TextureCI {
         void* initialData = nullptr;
         uint16_t width = 1;
@@ -222,33 +208,5 @@ namespace Flare {
         uint16_t width = 1;
         uint16_t height = 1;
         uint16_t depth = 1;
-
-        Handle<Sampler> sampler;
-    };
-
-    struct DescriptorSetCI {
-        Handle<DescriptorSetLayout> layout;
-
-        uint32_t resourceCount;
-
-        std::vector<Handle<Texture>> textures;
-        std::vector<Handle<Sampler>> samplers;
-        std::vector<Handle<Buffer>> buffers;
-        std::vector<uint32_t> bindings;
-
-        bool bindless = false;
-
-        DescriptorSetCI &addBuffer(Handle<Buffer> handle, uint32_t binding);
-
-        DescriptorSetCI &addTexture(Handle<Texture> handle, uint32_t binding);
-
-        DescriptorSetCI &addSampler(Handle<Sampler> handle, uint32_t binding);
-
-        DescriptorSetCI &addTextureSampler(Handle<Texture> textureHandle, Handle<Sampler> samplerHandle,
-                                           uint32_t binding);
-    };
-
-    struct DescriptorSet {
-        VkDescriptorSet descriptorSet;
     };
 }

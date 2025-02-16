@@ -53,11 +53,9 @@ namespace Flare {
 
         // Init resource pools;
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
-        descriptorSetLayouts.init(gpuDeviceCI.resourcePoolCI.descriptorSetLayouts);
         buffers.init(gpuDeviceCI.resourcePoolCI.buffers);
         textures.init(gpuDeviceCI.resourcePoolCI.textures);
         samplers.init(gpuDeviceCI.resourcePoolCI.samplers);
-        descriptorSets.init(gpuDeviceCI.resourcePoolCI.descriptorSets);
 
         // Instance
         if (volkInitialize() != VK_SUCCESS) {
@@ -186,6 +184,10 @@ namespace Flare {
         vkGetPhysicalDeviceMemoryProperties(physicalDevice, &physicalDeviceMemoryProperties);
         spdlog::info("GpuDevice: Using {}", physicalDeviceProperties.deviceName);
 
+        if (physicalDeviceProperties.limits.maxBoundDescriptorSets < 5) {
+            spdlog::error("Physical device does not support 5 bounded descriptor sets");
+        }
+
         // queues, separate family for each queue, todo: same family for queues in case can't find separate family
         uint32_t queueFamilyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
@@ -281,18 +283,34 @@ namespace Flare {
         std::vector<const char *> enabledDeviceExtensions;
 
         bool swapchainExtensionPresent = false;
+        bool accelStructExtensionPresent = false;
+        bool deferredHostOpExtensionPresent = false;
 
         for (size_t i = 0; i < deviceExtensionCount; i++) {
             if (strcmp(deviceExtensions[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0) {
                 swapchainExtensionPresent = true;
+            }
+            if (strcmp(deviceExtensions[i].extensionName, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0) {
+                accelStructExtensionPresent = true;
+            }
+            if (strcmp(deviceExtensions[i].extensionName, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0) {
+                deferredHostOpExtensionPresent = true;
             }
         }
 
         if (!swapchainExtensionPresent) {
             spdlog::error("GpuDevice: Swapchain extension not present");
         }
+        if (!accelStructExtensionPresent) {
+            spdlog::error("GpuDevice: Acceleration structure extension not present");
+        }
+        if (!deferredHostOpExtensionPresent) {
+            spdlog::error("GpuDevice: Deferred host operations extension not present");
+        }
 
         enabledDeviceExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        enabledDeviceExtensions.emplace_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        enabledDeviceExtensions.emplace_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
 
         // device features
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{
@@ -320,9 +338,14 @@ namespace Flare {
                 .pNext = &descriptorIndexingFeatures,
         };
 
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+                .pNext = &timelineSemaphoreFeatures,
+        };
+
         VkPhysicalDeviceFeatures2 features{
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &timelineSemaphoreFeatures,
+                .pNext = &accelStructFeatures,
         };
 
         vkGetPhysicalDeviceFeatures2(physicalDevice, &features);
@@ -382,6 +405,9 @@ namespace Flare {
         }
 
         vmaCreateAllocator(&allocatorCI, &allocator);
+
+        // bindless descriptor sets
+        createBindlessDescriptorSets(gpuDeviceCI);
 
         // surface and swapchain
         if (glfwCreateWindowSurface(instance, glfwWindow, nullptr, &surface) != VK_SUCCESS) {
@@ -484,96 +510,6 @@ namespace Flare {
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
         };
         defaultTexture = createTexture(defaultTextureCI);
-
-        const uint32_t globalPoolElements = 128;
-        std::vector<VkDescriptorPoolSize> poolSizes = {
-                {VK_DESCRIPTOR_TYPE_SAMPLER,                globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, globalPoolElements},
-                {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       globalPoolElements}
-        };
-
-        VkDescriptorPoolCreateInfo poolCI = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .maxSets = gpuDeviceCI.resourcePoolCI.descriptorSets,
-                .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
-                .pPoolSizes = poolSizes.data(),
-        };
-
-        if (vkCreateDescriptorPool(device, &poolCI, nullptr, &descriptorPool) != VK_SUCCESS) {
-            spdlog::error("Failed to create descriptor pool");
-        }
-
-        std::vector<VkDescriptorPoolSize> bindlessPoolSizes = {
-                {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, MAX_BINDLESS_RESOURCES},
-                {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          MAX_BINDLESS_RESOURCES},
-        };
-
-        VkDescriptorPoolCreateInfo bindlessPoolCI = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-                .maxSets = static_cast<uint32_t>(MAX_BINDLESS_RESOURCES * bindlessPoolSizes.size()),
-                .poolSizeCount = static_cast<uint32_t>(bindlessPoolSizes.size()),
-                .pPoolSizes = bindlessPoolSizes.data(),
-        };
-
-        if (vkCreateDescriptorPool(device, &bindlessPoolCI, nullptr, &bindlessDescriptorPool) != VK_SUCCESS) {
-            spdlog::error("Failed to create bindless descriptor pool");
-        }
-
-        std::array<VkDescriptorSetLayoutBinding, 2> bindlessBindings = {
-                VkDescriptorSetLayoutBinding{
-                        .binding = BINDLESS_TEXTURE_BINDING,
-                        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                        .descriptorCount = MAX_BINDLESS_RESOURCES,
-                        .stageFlags = VK_SHADER_STAGE_ALL,
-                        .pImmutableSamplers = nullptr,
-                },
-                VkDescriptorSetLayoutBinding{
-                        .binding = BINDLESS_TEXTURE_BINDING + 1,
-                        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                        .descriptorCount = MAX_BINDLESS_RESOURCES,
-                        .stageFlags = VK_SHADER_STAGE_ALL,
-                        .pImmutableSamplers = nullptr,
-                },
-        };
-
-        VkDescriptorBindingFlags bindlessFlags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
-                                                 VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-        VkDescriptorBindingFlags bindlessFlagsArray[2] = {bindlessFlags, bindlessFlags};
-
-        VkDescriptorSetLayoutBindingFlagsCreateInfo bindlessBindingFlags = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
-                .pNext = nullptr,
-                .bindingCount = bindlessBindings.size(),
-                .pBindingFlags = bindlessFlagsArray,
-        };
-
-        DescriptorSetLayoutCI bindlessLayoutCI = {
-                .bindings = bindlessBindings.data(),
-                .bindingCount = bindlessBindings.size(),
-                .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-                .bindingFlags = &bindlessBindingFlags,
-        };
-
-        bindlessDescriptorSetLayoutHandle = createDescriptorSetLayout(bindlessLayoutCI);
-
-        DescriptorSetCI bindlessSetCI = {
-                .layout = bindlessDescriptorSetLayoutHandle,
-                .bindless = true,
-        };
-
-        bindlessDescriptorSetHandle = createDescriptorSet(bindlessSetCI);
     }
 
     void GpuDevice::shutdown() {
@@ -582,10 +518,7 @@ namespace Flare {
         destroySampler(defaultSampler);
         destroyTexture(defaultTexture);
 
-        destroyDescriptorSetLayout(bindlessDescriptorSetLayoutHandle);
-
-        vkDestroyDescriptorPool(device, bindlessDescriptorPool, nullptr);
-        vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        destroyBindlessDescriptorSets();
 
         for (uint32_t i = 0; i < FRAMES_IN_FLIGHT; i++) {
             vkDestroyCommandPool(device, commandPools[i], nullptr);
@@ -751,14 +684,11 @@ namespace Flare {
         }
 
         Pipeline *pipeline = pipelines.get(handle);
-        ReflectOutput reflectOutput;
 
         std::vector<VkShaderModule> modules;
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
 
         for (const auto &shaderBinary: ci.shaderStages.shaderBinaries) {
-            reflect(reflectOutput, shaderBinary.spirv, shaderBinary.execModels);
-
             VkShaderModuleCreateInfo shaderModuleCI{
                     .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                     .pNext = nullptr,
@@ -786,39 +716,20 @@ namespace Flare {
             }
         }
 
-        std::vector<VkDescriptorSetLayout> pipelineSetLayouts;
-        pipelineSetLayouts.reserve(reflectOutput.getSetCount());
-
-        for (auto &set: reflectOutput.descriptorSets) {
-            uint32_t setIndex = set.first;
-            if (setIndex == BINDLESS_SET) {
-                pipelineSetLayouts.push_back(
-                        descriptorSetLayouts.get(bindlessDescriptorSetLayoutHandle)->descriptorSetLayout);
-                continue;
-            }
-
-            std::vector<VkDescriptorSetLayoutBinding> &bindings = set.second;
-
-            DescriptorSetLayoutCI descriptorSetLayoutCI = {
-                    .bindings = bindings.data(),
-                    .bindingCount = bindings.size(),
-            };
-
-            Handle<DescriptorSetLayout> descriptorSetLayoutHandle = createDescriptorSetLayout(
-                    descriptorSetLayoutCI);
-
-            pipeline->descriptorSetLayoutHandles.push_back(descriptorSetLayoutHandle);
-            pipelineSetLayouts.push_back(descriptorSetLayouts.get(descriptorSetLayoutHandle)->descriptorSetLayout);
-        }
+        VkPushConstantRange pcRange = {
+                .stageFlags = VK_SHADER_STAGE_ALL,
+                .offset = 0,
+                .size = sizeof(PushConstants),
+        };
 
         VkPipelineLayoutCreateInfo pipelineLayoutCI = {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
-                .setLayoutCount = static_cast<uint32_t>(pipelineSetLayouts.size()),
-                .pSetLayouts = pipelineSetLayouts.data(),
-                .pushConstantRangeCount = 0, // TODO: push constants reflection
-                .pPushConstantRanges = nullptr,
+                .setLayoutCount = static_cast<uint32_t>(bindlessDescriptorSetLayouts.size()),
+                .pSetLayouts = bindlessDescriptorSetLayouts.data(),
+                .pushConstantRangeCount = 1,
+                .pPushConstantRanges = &pcRange,
         };
 
         if (vkCreatePipelineLayout(device, &pipelineLayoutCI, nullptr, &pipeline->pipelineLayout) != VK_SUCCESS) {
@@ -1019,10 +930,6 @@ namespace Flare {
 
         vkDestroyPipelineLayout(device, pipeline->pipelineLayout, nullptr);
 
-        for (const auto &descSetHandle: pipeline->descriptorSetLayoutHandles) {
-            destroyDescriptorSetLayout(descSetHandle);
-        }
-
         vkDestroyPipeline(device, pipeline->pipeline, nullptr);
 
         pipelines.release(handle);
@@ -1106,47 +1013,6 @@ namespace Flare {
         }
     }
 
-    Handle<DescriptorSetLayout> GpuDevice::createDescriptorSetLayout(const DescriptorSetLayoutCI &ci) {
-        Handle<DescriptorSetLayout> handle = descriptorSetLayouts.obtain();
-        if (!handle.isValid()) {
-            return handle;
-        }
-
-        DescriptorSetLayout *layout = descriptorSetLayouts.get(handle);
-
-        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCI = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-                .pNext = ci.bindingFlags,
-                .flags = ci.flags,
-                .bindingCount = static_cast<uint32_t>(ci.bindingCount),
-                .pBindings = ci.bindings,
-        };
-
-        if (vkCreateDescriptorSetLayout(device, &descriptorSetLayoutCI, nullptr,
-                                        &layout->descriptorSetLayout) != VK_SUCCESS) {
-            spdlog::error("Failed to create descriptor set layout");
-        }
-
-        for (size_t i = 0; i < ci.bindingCount; i++) {
-            assert(!layout->bindings.contains(ci.bindings[i].binding));
-            layout->bindings.insert({ci.bindings[i].binding, ci.bindings[i]});
-        }
-
-        return handle;
-    }
-
-    void GpuDevice::destroyDescriptorSetLayout(Handle<DescriptorSetLayout> handle) {
-        if (!handle.isValid()) {
-            spdlog::error("Invalid descriptor set layout handle");
-            return;
-        }
-
-        DescriptorSetLayout *layout = descriptorSetLayouts.get(handle);
-        vkDestroyDescriptorSetLayout(device, layout->descriptorSetLayout, nullptr);
-
-        descriptorSetLayouts.release(handle);
-    }
-
     void GpuDevice::newFrame() {
         if (absoluteFrame >= FRAMES_IN_FLIGHT) {
             uint64_t graphicsTimelineWaitValue = absoluteFrame - FRAMES_IN_FLIGHT + 1;
@@ -1178,43 +1044,6 @@ namespace Flare {
     void GpuDevice::present() {
         VkSemaphore *imageAcquiredSemaphore = &imageAcquiredSemaphores[currentFrame];
         VkSemaphore *renderCompletedSemaphore = &renderCompletedSemaphores[currentFrame];
-
-        if (!bindlessTextureUpdates.empty()) {
-            VkWriteDescriptorSet bindlessWrites[MAX_BINDLESS_RESOURCES];
-            VkDescriptorImageInfo bindlessImageInfo[MAX_BINDLESS_RESOURCES];
-            uint32_t writeIndex = 0;
-
-            for (auto &handle: bindlessTextureUpdates) {
-                Texture *texture = textures.get(handle);
-
-                VkDescriptorImageInfo &imageInfo = bindlessImageInfo[writeIndex];
-                imageInfo = {
-                        .sampler = texture->sampler.isValid() ? samplers.get(texture->sampler)->sampler :
-                                   samplers.get(defaultSampler)->sampler,
-                        .imageView = texture->format != VK_FORMAT_UNDEFINED ? texture->imageView :
-                                     textures.get(defaultTexture)->imageView,
-                        .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                };
-
-                VkWriteDescriptorSet &descriptorWrite = bindlessWrites[writeIndex];
-                descriptorWrite = {
-                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                        .pNext = nullptr,
-                        .dstSet = descriptorSets.get(bindlessDescriptorSetHandle)->descriptorSet,
-                        .dstBinding = BINDLESS_TEXTURE_BINDING,
-                        .dstArrayElement = handle.index,
-                        .descriptorCount = 1,
-                        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                        .pImageInfo = &imageInfo,
-                };
-
-                writeIndex++;
-            }
-
-            bindlessTextureUpdates.clear();
-
-            vkUpdateDescriptorSets(device, writeIndex, bindlessWrites, 0, nullptr);
-        }
 
         std::vector<VkSemaphoreSubmitInfo> waitSemaphores;
         waitSemaphores.reserve(2);
@@ -1343,7 +1172,7 @@ namespace Flare {
                 .pNext = nullptr,
                 .flags = 0,
                 .size = ci.size,
-                .usage = ci.usageFlags,
+                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | ci.usageFlags,
         };
 
         VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
@@ -1357,6 +1186,24 @@ namespace Flare {
                         &buffer->allocationInfo);
 
         buffer->size = ci.size;
+
+        VkDescriptorBufferInfo descBuf = {
+                .buffer = buffer->buffer,
+                .offset = 0,
+                .range = buffer->size,
+        };
+
+        VkWriteDescriptorSet write = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = bindlessDescriptorSets[STORAGE_BUFFERS_SET],
+                .dstBinding = 0,
+                .dstArrayElement = handle.index,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                .pBufferInfo = &descBuf,
+        };
+
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
         return handle;
     }
@@ -1504,7 +1351,23 @@ namespace Flare {
             destroyBuffer(textureStagingBufferHandle);
         }
 
-        bindlessTextureUpdates.push_back(handle);
+        VkDescriptorImageInfo imageInfo = {
+                .imageView = texture->format == VK_FORMAT_UNDEFINED ? textures.get(defaultTexture)->imageView
+                                                                    : texture->imageView,
+                .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
+        };
+
+        VkWriteDescriptorSet write = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = bindlessDescriptorSets[SAMPLED_IMAGES_SET],
+                .dstBinding = 0,
+                .dstArrayElement = handle.index,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                .pImageInfo = &imageInfo
+        };
+
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
         return handle;
     }
@@ -1521,121 +1384,6 @@ namespace Flare {
         vmaDestroyImage(allocator, texture->image, texture->allocation);
 
         textures.release(handle);
-    }
-
-    Handle<DescriptorSet> GpuDevice::createDescriptorSet(const DescriptorSetCI &ci) {
-        Handle<DescriptorSet> handle = descriptorSets.obtain();
-        if (!handle.isValid()) {
-            return handle;
-        }
-
-        DescriptorSet *descriptorSet = descriptorSets.get(handle);
-
-        DescriptorSetLayout *layout = descriptorSetLayouts.get(ci.layout);
-
-        VkDescriptorSetAllocateInfo allocInfo = {
-                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-                .pNext = nullptr,
-                .descriptorPool = ci.bindless ? bindlessDescriptorPool : descriptorPool,
-                .descriptorSetCount = 1,
-                .pSetLayouts = &layout->descriptorSetLayout,
-        };
-
-        if (vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet->descriptorSet) != VK_SUCCESS) {
-            spdlog::error("Failed to allocate descriptors set");
-        }
-
-        std::vector<VkWriteDescriptorSet> writeDescSets(ci.resourceCount);
-        std::vector<VkDescriptorBufferInfo> bufferInfos(ci.resourceCount);
-        std::vector<VkDescriptorImageInfo> imageInfos(ci.resourceCount);
-
-        for (size_t i = 0; i < ci.resourceCount; i++) {
-            VkDescriptorSetLayoutBinding layoutBinding = layout->bindings.at(ci.bindings[i]);
-
-            switch (layoutBinding.descriptorType) {
-                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC: {
-                    Handle<Buffer> bufferHandle = ci.buffers[i];
-                    Buffer *buffer = buffers.get(bufferHandle);
-
-                    bufferInfos[i] = {
-                            .buffer = buffer->buffer,
-                            .offset = 0,
-                            .range = buffer->size,
-                    };
-
-                    writeDescSets[i] = {
-                            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                            .pNext = nullptr,
-                            .dstSet = descriptorSet->descriptorSet,
-                            .dstBinding = layoutBinding.binding,
-                            .dstArrayElement = 0,
-                            .descriptorCount = 1,
-                            .descriptorType = layoutBinding.descriptorType,
-                            .pImageInfo = nullptr,
-                            .pBufferInfo = &bufferInfos[i],
-                            .pTexelBufferView = nullptr,
-                    };
-                    break;
-                }
-                case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
-                    Handle<Texture> textureHandle = ci.textures[i];
-                    Texture *texture = textures.get(textureHandle);
-
-                    imageInfos[i] = {
-                            .sampler = nullptr,
-                            .imageView = texture->imageView,
-                            .imageLayout = texture->format == VK_FORMAT_D32_SFLOAT ?
-                                           VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL :
-                                           VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
-                    };
-
-                    writeDescSets[i] = {
-                            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                            .pNext = nullptr,
-                            .dstSet = descriptorSet->descriptorSet,
-                            .dstBinding = layoutBinding.binding,
-                            .dstArrayElement = 0,
-                            .descriptorCount = 1,
-                            .descriptorType = layoutBinding.descriptorType,
-                            .pImageInfo = &imageInfos[i],
-                            .pBufferInfo = nullptr,
-                            .pTexelBufferView = nullptr,
-                    };
-                    break;
-                }
-                case VK_DESCRIPTOR_TYPE_SAMPLER: {
-                    Handle<Sampler> samplerHandle = ci.samplers[i];
-                    Sampler *sampler = samplers.get(samplerHandle);
-
-                    imageInfos[i] = {
-                            .sampler = sampler->sampler,
-                    };
-
-                    writeDescSets[i] = {
-                            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                            .pNext = nullptr,
-                            .dstSet = descriptorSet->descriptorSet,
-                            .dstBinding = layoutBinding.binding,
-                            .dstArrayElement = 0,
-                            .descriptorCount = 1,
-                            .descriptorType = layoutBinding.descriptorType,
-                            .pImageInfo = &imageInfos[i],
-                            .pBufferInfo = nullptr,
-                            .pTexelBufferView = nullptr,
-                    };
-                    break;
-                }
-                default:
-                    break;
-            }
-        }
-
-        vkUpdateDescriptorSets(device, ci.resourceCount, writeDescSets.data(), 0, nullptr);
-
-        return handle;
     }
 
     Handle<Sampler> GpuDevice::createSampler(const SamplerCI &ci) {
@@ -1668,6 +1416,22 @@ namespace Flare {
         };
 
         vkCreateSampler(device, &samplerCI, nullptr, &sampler->sampler);
+
+        VkDescriptorImageInfo samplerInfo = {
+                .sampler = sampler->sampler,
+        };
+
+        VkWriteDescriptorSet write = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = bindlessDescriptorSets[SAMPLERS_SET],
+                .dstBinding = 0,
+                .dstArrayElement = handle.index,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                .pImageInfo = &samplerInfo,
+        };
+
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 
         return handle;
     }
@@ -1702,5 +1466,125 @@ namespace Flare {
         if (vkGetFenceStatus(device, immediateFence) != VK_SUCCESS) {
             vkWaitForFences(device, 1, &immediateFence, VK_TRUE, UINT64_MAX);
         }
+    }
+
+    void GpuDevice::createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci) {
+        const std::array<VkDescriptorPoolSize, 5> poolSizes = {
+                VkDescriptorPoolSize{
+                        .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                        .descriptorCount = ci.bindlessSetup.storageBuffers,
+                },
+                VkDescriptorPoolSize{
+                        .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                        .descriptorCount = ci.bindlessSetup.sampledImages,
+                },
+                VkDescriptorPoolSize{
+                        .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                        .descriptorCount = ci.bindlessSetup.storageImages,
+                },
+                VkDescriptorPoolSize{
+                        .type = VK_DESCRIPTOR_TYPE_SAMPLER,
+                        .descriptorCount = ci.bindlessSetup.samplers,
+                },
+                VkDescriptorPoolSize{
+                        .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+                        .descriptorCount = ci.bindlessSetup.accelStructs,
+                }
+        };
+
+        uint32_t setCount = ci.bindlessSetup.storageBuffers +
+                            ci.bindlessSetup.sampledImages +
+                            ci.bindlessSetup.storageImages +
+                            ci.bindlessSetup.samplers +
+                            ci.bindlessSetup.accelStructs;
+
+        VkDescriptorPoolCreateInfo poolCI = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+                .maxSets = setCount,
+                .poolSizeCount = poolSizes.size(),
+                .pPoolSizes = poolSizes.data(),
+        };
+
+        if (vkCreateDescriptorPool(device, &poolCI, nullptr, &bindlessDescriptorPool) != VK_SUCCESS) {
+            spdlog::error("Failed to create bindless descriptor pool");
+        }
+
+        const std::array<VkDescriptorSetLayoutBinding, 5> bindlessBindings = {
+                VkDescriptorSetLayoutBinding{
+                        .binding = 0,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                        .descriptorCount = ci.bindlessSetup.storageBuffers,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                },
+                VkDescriptorSetLayoutBinding{
+                        .binding = 0,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                        .descriptorCount = ci.bindlessSetup.sampledImages,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                },
+                VkDescriptorSetLayoutBinding{
+                        .binding = 0,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                        .descriptorCount = ci.bindlessSetup.storageImages,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                },
+                VkDescriptorSetLayoutBinding{
+                        .binding = 0,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                        .descriptorCount = ci.bindlessSetup.samplers,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                },
+                VkDescriptorSetLayoutBinding{
+                        .binding = 0,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+                        .descriptorCount = ci.bindlessSetup.accelStructs,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                }
+        };
+
+        VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+                                         VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+
+        VkDescriptorSetLayoutBindingFlagsCreateInfo bindlessFlags = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+                .pNext = nullptr,
+                .bindingCount = 1,
+                .pBindingFlags = &flags,
+        };
+
+        for (size_t i = 0; i < 5; i++) {
+            VkDescriptorSetLayoutCreateInfo setCI = {
+                    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+                    .pNext = &bindlessFlags,
+                    .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+                    .bindingCount = 1,
+                    .pBindings = &bindlessBindings[i],
+            };
+
+            if (vkCreateDescriptorSetLayout(device, &setCI, nullptr, &bindlessDescriptorSetLayouts[i]) != VK_SUCCESS) {
+                spdlog::error("Failed to create bindless descriptor set layout");
+            }
+        }
+
+        VkDescriptorSetAllocateInfo allocInfo = {
+                .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                .pNext = nullptr,
+                .descriptorPool = bindlessDescriptorPool,
+                .descriptorSetCount = static_cast<uint32_t>(bindlessDescriptorSetLayouts.size()),
+                .pSetLayouts = bindlessDescriptorSetLayouts.data(),
+        };
+
+        if (vkAllocateDescriptorSets(device, &allocInfo, bindlessDescriptorSets.data()) != VK_SUCCESS) {
+            spdlog::error("Failed to allocate bindless descriptor sets");
+        }
+    }
+
+    void GpuDevice::destroyBindlessDescriptorSets() {
+        for (const auto &layout: bindlessDescriptorSetLayouts) {
+            vkDestroyDescriptorSetLayout(device, layout, nullptr);
+        }
+        vkDestroyDescriptorPool(device, bindlessDescriptorPool, nullptr);
     }
 }
