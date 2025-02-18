@@ -703,17 +703,15 @@ namespace Flare {
             }
             modules.push_back(shaderModule);
 
-            for (const auto &execModel: shaderBinary.execModels) {
-                shaderStages.emplace_back(VkPipelineShaderStageCreateInfo{
-                        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                        .pNext = nullptr,
-                        .flags = 0,
-                        .stage = execModel.stage,
-                        .module = shaderModule,
-                        .pName = execModel.entryPointName,
-                        .pSpecializationInfo = nullptr,
-                });
-            }
+            shaderStages.emplace_back(VkPipelineShaderStageCreateInfo{
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .pNext = nullptr,
+                    .flags = 0,
+                    .stage = shaderBinary.stage,
+                    .module = shaderModule,
+                    .pName = "main",
+                    .pSpecializationInfo = nullptr,
+            });
         }
 
         VkPushConstantRange pcRange = {
@@ -933,84 +931,6 @@ namespace Flare {
         vkDestroyPipeline(device, pipeline->pipeline, nullptr);
 
         pipelines.release(handle);
-    }
-
-    void GpuDevice::reflect(ReflectOutput &reflection, const std::vector<uint32_t> &spirv,
-                            const std::span<ShaderExecModel> &execModels) const {
-        using namespace spirv_cross;
-
-        Compiler comp(spirv);
-        auto entryPoints = comp.get_entry_points_and_stages();
-        const char *stageString;
-
-        for (const auto &model: execModels) {
-            spv::ExecutionModel spvExecModel = spv::ExecutionModelMax;
-            switch (model.stage) {
-                case VK_SHADER_STAGE_VERTEX_BIT:
-                    spvExecModel = spv::ExecutionModelVertex;
-                    stageString = "Vertex";
-                    break;
-                case VK_SHADER_STAGE_FRAGMENT_BIT:
-                    spvExecModel = spv::ExecutionModelFragment;
-                    stageString = "Fragment";
-                    break;
-                case VK_SHADER_STAGE_COMPUTE_BIT:
-                    spvExecModel = spv::ExecutionModelGLCompute;
-                    stageString = "Compute";
-                    break;
-                default:
-                    spdlog::error("Invalid execution model");
-                    break;
-            }
-
-            comp.set_entry_point(model.entryPointName, spvExecModel);
-
-            ShaderResources res = comp.get_shader_resources();
-            for (auto &uniform: res.uniform_buffers) {
-                uint32_t set = comp.get_decoration(uniform.id, spv::DecorationDescriptorSet);
-                uint32_t binding = comp.get_decoration(uniform.id, spv::DecorationBinding);
-
-                spdlog::info("{} shader: Found UBO {} at set = {}, binding = {}",
-                             stageString, uniform.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, model.stage);
-            }
-
-            for (auto &image: res.separate_images) {
-                uint32_t set = comp.get_decoration(image.id, spv::DecorationDescriptorSet);
-                uint32_t binding = comp.get_decoration(image.id, spv::DecorationBinding);
-
-                spdlog::info("{} shader: Found sampled image {} at set = {}, binding = {}",
-                             stageString, image.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, model.stage);
-            }
-
-            for (auto &sampler: res.separate_samplers) {
-                uint32_t set = comp.get_decoration(sampler.id, spv::DecorationDescriptorSet);
-                uint32_t binding = comp.get_decoration(sampler.id, spv::DecorationBinding);
-
-                spdlog::info("{} shader: Found sampler {} at set = {}, binding = {}",
-                             stageString, sampler.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_SAMPLER, model.stage);
-            }
-
-            for (auto &sampledImage: res.sampled_images) {
-                uint32_t set = comp.get_decoration(sampledImage.id, spv::DecorationDescriptorSet);
-
-                uint32_t binding = comp.get_decoration(sampledImage.id, spv::DecorationBinding);
-                spdlog::info("{} shader: Found combined image sampler {} at set = {}, binding = {}",
-                             stageString, sampledImage.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, model.stage);
-            }
-
-            for (auto &storageBuffer: res.storage_buffers) {
-                uint32_t set = comp.get_decoration(storageBuffer.id, spv::DecorationDescriptorSet);
-
-                uint32_t binding = comp.get_decoration(storageBuffer.id, spv::DecorationBinding);
-                spdlog::info("{} shader: Found SSBO {} at set = {}, binding = {}",
-                             stageString, storageBuffer.name, set, binding);
-                reflection.addBinding(set, binding, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, model.stage);
-            }
-        }
     }
 
     void GpuDevice::newFrame() {

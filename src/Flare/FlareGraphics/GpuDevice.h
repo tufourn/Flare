@@ -74,9 +74,6 @@ namespace Flare {
 
         void submitImmediate(VkCommandBuffer cmd);
 
-        void reflect(ReflectOutput &reflection, const std::vector<uint32_t> &spirv,
-                     const std::span<ShaderExecModel> &execModels) const; // todo: doesn't need to be in this class
-
         Handle<Pipeline> createPipeline(const PipelineCI &ci);
 
         void destroyPipeline(Handle<Pipeline> handle);

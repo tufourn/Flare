@@ -51,16 +51,11 @@ struct TriangleApp : Application {
         shaderCompiler.init();
 
         std::vector<uint32_t> shader = shaderCompiler.compileSlang("shaders/gltf.slang");
-        std::vector<uint32_t> testShader = shaderCompiler.compileGLSL("shaders/triangle.frag");
-
-        Flare::ReflectOutput reflection;
-        std::vector<ShaderExecModel> execModels = {
-                {VK_SHADER_STAGE_VERTEX_BIT,   "main"},
-                {VK_SHADER_STAGE_FRAGMENT_BIT, "main"},
-        };
+        std::vector<uint32_t> testShader = shaderCompiler.compileGLSL("shaders/gltf.frag");
 
         PipelineCI pipelineCI;
-        pipelineCI.shaderStages.addBinary({execModels, shader});
+        pipelineCI.shaderStages.addBinary({VK_SHADER_STAGE_VERTEX_BIT, shader});
+        pipelineCI.shaderStages.addBinary({VK_SHADER_STAGE_FRAGMENT_BIT, testShader});
         pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
         pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
         pipelineCI.depthStencil = {

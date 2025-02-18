@@ -69,13 +69,8 @@ namespace Flare {
         }
     };
 
-    struct ShaderExecModel {
-        VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
-        const char *entryPointName = "main";
-    };
-
     struct ShaderBinary {
-        const std::span<ShaderExecModel> &execModels;
+        VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
         const std::vector<uint32_t> &spirv;
     };
 
