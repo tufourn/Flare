@@ -15,5 +15,4 @@ target_link_libraries(flare-textured-triangle PRIVATE
 )
 
 target_copy_slang_binaries(flare-textured-triangle)
-copy_assets(flare-textured-triangle shaders)
-copy_assets(flare-textured-triangle assets)
+copy_assets(flare-textured-triangle shaders assets)

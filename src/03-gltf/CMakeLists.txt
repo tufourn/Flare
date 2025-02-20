@@ -15,5 +15,4 @@ target_link_libraries(flare-gltf PRIVATE
 )
 
 target_copy_slang_binaries(flare-gltf)
-copy_assets(flare-gltf shaders)
-copy_assets(flare-gltf assets)
+copy_assets(flare-gltf shaders assets)
