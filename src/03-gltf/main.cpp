@@ -67,7 +67,7 @@ struct TriangleApp : Application {
         pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
         pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
         pipelineCI.depthStencil = {
-                .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+                .depthCompareOp = VK_COMPARE_OP_GREATER_OR_EQUAL,
                 .depthTestEnable = true,
                 .depthWriteEnable = true,
         };
@@ -233,8 +233,8 @@ struct TriangleApp : Application {
 
                 glm::mat4 view = camera.getViewMatrix();
                 glm::mat4 projection = glm::perspectiveZO(glm::radians(45.f),
-                                                          static_cast<float>(window.width) / window.height, 0.001f,
-                                                          1e9f);
+                                                          static_cast<float>(window.width) / window.height, 1e9f,
+                                                          0.001f);
                 projection[1][1] *= -1;
                 globals.mvp = projection * view;
 
@@ -282,7 +282,7 @@ struct TriangleApp : Application {
                         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                         .clearValue = {
                                 .depthStencil = {
-                                        .depth = 1.f,
+                                        .depth = 0.f,
                                 },
                         },
                 };
