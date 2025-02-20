@@ -344,9 +344,14 @@ namespace Flare {
                 .pNext = &timelineSemaphoreFeatures,
         };
 
+        VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParamFeatures{
+                .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
+                .pNext = &accelStructFeatures,
+        };
+
         VkPhysicalDeviceFeatures2 features{
                 .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                .pNext = &accelStructFeatures,
+                .pNext = &shaderDrawParamFeatures,
         };
 
         vkGetPhysicalDeviceFeatures2(physicalDevice, &features);

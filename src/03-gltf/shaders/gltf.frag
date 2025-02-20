@@ -1,4 +1,4 @@
-#version 450
+#version 460
 
 #extension GL_EXT_nonuniform_qualifier : enable
 
@@ -9,12 +9,12 @@ layout (set = 4, binding = 0) uniform sampler globalSamplers[];
 layout (location = 0) in vec3 inFragPos;
 layout (location = 1) in vec2 inUV;
 layout (location = 2) in vec3 inNormal;
+layout (location = 3) flat in uint inDrawID;
 
 layout (location = 0) out vec4 outColor;
 
 layout (push_constant) uniform PushConstants {
     uint globalIndex;
-    uint meshDrawIndex;
 } pc;
 
 struct Light {
@@ -81,7 +81,7 @@ layout (set = 1, binding = 0) readonly buffer M {
 
 void main() {
     Globals glob = globalBuffer[pc.globalIndex].globals;
-    GpuMeshDraw md = meshDrawBuffer[glob.meshDrawBufferIndex].meshDraws[pc.meshDrawIndex];
+    GpuMeshDraw md = meshDrawBuffer[glob.meshDrawBufferIndex].meshDraws[inDrawID];
 
     Material mat = materialBuffer[glob.materialBufferIndex].materials[md.materialOffset];
 

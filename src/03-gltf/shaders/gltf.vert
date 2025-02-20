@@ -1,10 +1,9 @@
-#version 450
+#version 460
 
 #extension GL_EXT_nonuniform_qualifier : enable
 
 layout (push_constant) uniform PushConstants {
     uint globalIndex;
-    uint meshDrawIndex;
 } pc;
 
 struct Light {
@@ -61,11 +60,12 @@ layout (set = 1, binding = 0) readonly buffer Position {
 layout (location = 0) out vec3 outFragPos;
 layout (location = 1) out vec2 outUV;
 layout (location = 2) out vec3 outNormal;
+layout (location = 3) out uint outDrawID;
 
 void main() {
     Globals glob = globalBuffer[pc.globalIndex].globals;
 
-    GpuMeshDraw md = meshDrawBuffer[glob.meshDrawBufferIndex].meshDraws[pc.meshDrawIndex];
+    GpuMeshDraw md = meshDrawBuffer[glob.meshDrawBufferIndex].meshDraws[gl_DrawID];
 
     mat4 transform = transformBuffer[glob.transformBufferIndex].transforms[md.transformOffset];
 
@@ -75,4 +75,5 @@ void main() {
     outFragPos = position.xyz;
     outUV = uvBuffer[glob.uvBufferIndex].uvs[gl_VertexIndex];
     outNormal = mat3(transpose(inverse(transform))) * normalBuffer[glob.normalBufferIndex].normals[gl_VertexIndex].xyz;
+    outDrawID = gl_DrawID;
 }

@@ -40,6 +40,10 @@ struct TriangleApp : Application {
         uint32_t materialOffset;
     };
 
+    struct IndirectDrawCommand {
+        VkDrawIndexedIndirectCommand cmd;
+    };
+
     void init(const ApplicationConfig &appConfig) override {
         WindowConfig windowConfig{};
         windowConfig
@@ -200,6 +204,15 @@ struct TriangleApp : Application {
                 }
         );
 
+        indirectDraws.resize(gltf.meshDraws.size());
+        BufferCI indirectDrawCI = {
+                .size = sizeof(IndirectDrawCommand) * gltf.meshDraws.size(),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .mapped = true,
+                .name = "indirectDraws",
+        };
+        indirectDrawBufferHandle = gpu.createBuffer(indirectDrawCI);
+
         globals.positionBufferIndex = positionBufferHandle.index;
         globals.normalBufferIndex = normalBufferHandle.index;
         globals.uvBufferIndex = uvBufferHandle.index;
@@ -328,11 +341,23 @@ struct TriangleApp : Application {
 
                 for (size_t i = 0; i < gltf.meshDraws.size(); i++) {
                     const MeshDraw &md = gltf.meshDraws[i];
-                    pc.data0 = i;
-                    vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
-                                       &pc);
-                    vkCmdDrawIndexed(cmd, md.indexCount, 1, md.indexOffset, md.vertexOffset, 0);
+
+                    indirectDraws[i].cmd = {
+                            .indexCount = md.indexCount,
+                            .instanceCount = 1,
+                            .firstIndex = md.indexOffset,
+                            .vertexOffset = static_cast<int32_t>(md.vertexOffset),
+                            .firstInstance = 0,
+                    };
                 }
+
+                vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
+                                   &pc);
+
+                memcpy(gpu.getBuffer(indirectDrawBufferHandle)->allocationInfo.pMappedData, indirectDraws.data(),
+                       sizeof(IndirectDrawCommand) * indirectDraws.size());
+                vkCmdDrawIndexedIndirect(cmd, gpu.getBuffer(indirectDrawBufferHandle)->buffer, 0, gltf.meshDraws.size(),
+                                         sizeof(IndirectDrawCommand));
 
                 vkCmdEndRendering(cmd);
 
@@ -374,6 +399,7 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(textureIndicesHandle);
         gpu.destroyBuffer(materialBufferHandle);
         gpu.destroyBuffer(normalBufferHandle);
+        gpu.destroyBuffer(indirectDrawBufferHandle);
 
         asyncLoader.shutdown();
         gpu.shutdown();
@@ -396,6 +422,8 @@ struct TriangleApp : Application {
     Handle<Buffer> textureIndicesHandle;
     Handle<Buffer> materialBufferHandle;
     Handle<Buffer> normalBufferHandle;
+    std::vector<IndirectDrawCommand> indirectDraws;
+    Handle<Buffer> indirectDrawBufferHandle;
     std::vector<GpuMeshDraw> gpuMeshDraws;
 
     Camera camera;

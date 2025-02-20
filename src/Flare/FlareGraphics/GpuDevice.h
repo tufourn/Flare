@@ -25,7 +25,6 @@ namespace Flare {
 
     struct PushConstants {
         uint32_t bindingsOffset;
-        uint32_t data0;
     };
 
     struct ResourcePoolCI {
