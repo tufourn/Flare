@@ -1,6 +1,7 @@
 #include "Camera.h"
 #include "GLFW/glfw3.h"
 #include "spdlog/spdlog.h"
+#include "imgui.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
 
@@ -47,6 +48,11 @@ namespace Flare {
     }
 
     void Camera::mouseCallback(GLFWwindow *window, double xPos, double yPos) {
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.WantCaptureMouse) {
+            return;
+        }
+
         static double lastX = xPos;
         static double lastY = yPos;
 
@@ -120,6 +126,11 @@ namespace Flare {
 
 
     void Camera::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.WantCaptureKeyboard) {
+            return;
+        }
+
         Camera *camera = reinterpret_cast<Camera *>(glfwGetWindowUserPointer(window));
         camera->processKeypress(key, action);
     }
@@ -135,6 +146,10 @@ namespace Flare {
     }
 
     void Camera::mouseButtonCallback(GLFWwindow *window, int button, int action, int mods) {
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.WantCaptureMouse) {
+            return;
+        }
         Camera *camera = reinterpret_cast<Camera *>(glfwGetWindowUserPointer(window));
         camera->processMouseButton(button, action);
     }

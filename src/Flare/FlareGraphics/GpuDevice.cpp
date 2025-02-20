@@ -495,7 +495,6 @@ namespace Flare {
             }
         }
 
-
         createDefaultTextures();
     }
 

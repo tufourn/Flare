@@ -8,6 +8,7 @@
 #include <spdlog/spdlog.h>
 #include <vk_mem_alloc.h>
 #include <map>
+#include <glm/glm.hpp>
 
 namespace Flare {
     constexpr uint32_t invalidIndex = 0xFFFFFFFF;
@@ -211,5 +212,13 @@ namespace Flare {
 
         Handle<Texture> handle;
         std::string name;
+    };
+
+    struct Light {
+        glm::vec3 position;
+        float radius;
+
+        glm::vec3 color;
+        float intensity;
     };
 }

@@ -159,6 +159,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/GltfScene.h
         src/Flare/FlareGraphics/RingBuffer.cpp
         src/Flare/FlareGraphics/RingBuffer.h
+        src/Flare/FlareGraphics/FlareImgui.cpp
+        src/Flare/FlareGraphics/FlareImgui.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal

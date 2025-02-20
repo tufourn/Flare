@@ -11,6 +11,8 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "FlareGraphics/GltfScene.h"
 #include "FlareGraphics/RingBuffer.h"
+#include "FlareGraphics/FlareImgui.h"
+#include "imgui.h"
 
 using namespace Flare;
 
@@ -19,13 +21,16 @@ struct TriangleApp : Application {
         glm::mat4 mvp;
 
         uint32_t positionBufferIndex;
+        uint32_t normalBufferIndex;
         uint32_t uvBufferIndex;
         uint32_t transformBufferIndex;
-        uint32_t textureBufferIndex;
 
+        uint32_t textureBufferIndex;
         uint32_t materialBufferIndex;
         uint32_t meshDrawBufferIndex;
-        float pad[2];
+        float pad;
+
+        Light light;
     };
 
     Globals globals;
@@ -71,8 +76,8 @@ struct TriangleApp : Application {
 
 //        gltf.init("assets/Triangle.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
-        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
-//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -159,6 +164,19 @@ struct TriangleApp : Application {
                 }
         );
 
+        BufferCI normalCI = {
+                .size = sizeof(glm::vec4) * gltf.normals.size(),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .name = "normals",
+        };
+        normalBufferHandle = gpu.createBuffer(normalCI);
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = gpu.getBuffer(normalBufferHandle),
+                        .data = (void *) gltf.normals.data(),
+                }
+        );
+
         BufferCI meshDrawCI = {
                 .size = sizeof(GpuMeshDraw) * gltf.meshDraws.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -182,21 +200,32 @@ struct TriangleApp : Application {
         );
 
         globals.positionBufferIndex = positionBufferHandle.index;
+        globals.normalBufferIndex = normalBufferHandle.index;
         globals.uvBufferIndex = uvBufferHandle.index;
         globals.transformBufferIndex = transformBufferHandle.index;
         globals.textureBufferIndex = textureIndicesHandle.index;
         globals.materialBufferIndex = materialBufferHandle.index;
         globals.meshDrawBufferIndex = meshDrawBufferHandle.index;
 
+        globals.light = {
+                .position = {0.f, 4.f, 0.f},
+                .radius = 1.f,
+                .color = {1.f, 1.f, 1.f},
+                .intensity = 1.f,
+        };
+
         glfwSetWindowUserPointer(window.glfwWindow, &camera);
         glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
         glfwSetKeyCallback(window.glfwWindow, Camera::keyCallback);
         glfwSetMouseButtonCallback(window.glfwWindow, Camera::mouseButtonCallback);
+
+        imgui.init(&gpu);
     }
 
     void loop() override {
         while (!window.shouldClose()) {
             window.newFrame();
+            imgui.newFrame();
 
             if (!window.isMinimized()) {
                 camera.update();
@@ -306,6 +335,13 @@ struct TriangleApp : Application {
 
                 vkCmdEndRendering(cmd);
 
+                ImGui::Begin("Light");
+                ImGui::SliderFloat3("Light", reinterpret_cast<float *>(&globals.light.position), -10.f, 10.f);
+                ImGui::End();
+
+                ImGui::Render();
+                imgui.draw(cmd, gpu.swapchainImageViews[gpu.swapchainImageIndex]);
+
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                           VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
@@ -322,6 +358,8 @@ struct TriangleApp : Application {
     void shutdown() override {
         vkDeviceWaitIdle(gpu.device);
 
+        imgui.shutdown();
+
         gltf.shutdown();
 
         globalsRingBuffer.shutdown();
@@ -334,6 +372,7 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(meshDrawBufferHandle);
         gpu.destroyBuffer(textureIndicesHandle);
         gpu.destroyBuffer(materialBufferHandle);
+        gpu.destroyBuffer(normalBufferHandle);
 
         asyncLoader.shutdown();
         gpu.shutdown();
@@ -355,11 +394,14 @@ struct TriangleApp : Application {
     Handle<Buffer> meshDrawBufferHandle;
     Handle<Buffer> textureIndicesHandle;
     Handle<Buffer> materialBufferHandle;
+    Handle<Buffer> normalBufferHandle;
     std::vector<GpuMeshDraw> gpuMeshDraws;
 
     Camera camera;
 
     GltfScene gltf;
+
+    FlareImgui imgui;
 };
 
 int main() {
