@@ -87,14 +87,18 @@ void main() {
 
     TextureIndex tex = textureIndexBuffer[glob.textureBufferIndex].textureIndices[mat.albedoTextureOffset];
 
-    outColor = texture(sampler2D(globalTextures[nonuniformEXT(tex.textureIndex)], globalSamplers[nonuniformEXT(tex.samplerIndex)]), inUV);
+    vec4 fragColor = texture(sampler2D(globalTextures[nonuniformEXT(tex.textureIndex)],
+    globalSamplers[nonuniformEXT(tex.samplerIndex)]), inUV);
+
+    if (fragColor.a < 0.01) {
+        discard;
+    }
 
     vec3 lightPos = glob.light.position;
     vec3 lightColor = glob.light.color;
     float lightIntensity = glob.light.intensity;
 
-    vec3 albedo = texture(sampler2D(globalTextures[nonuniformEXT(tex.textureIndex)],
-    globalSamplers[nonuniformEXT(tex.samplerIndex)]), inUV).rgb;
+    vec3 albedo = fragColor.rgb;
 
     vec3 N = normalize(inNormal);
     vec3 L = normalize(lightPos - inFragPos);
@@ -108,5 +112,5 @@ void main() {
     vec3 specular = spec * lightColor * lightIntensity;
 
     vec3 finalColor = ambient + diffuse + specular;
-    outColor = vec4(finalColor, 1.0);
+    outColor = vec4(finalColor, fragColor.a);
 }
