@@ -77,6 +77,7 @@ struct TriangleApp : Application {
 //        gltf.init("assets/Triangle.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/structure.glb", &gpu, &asyncLoader);
         gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
 
         BufferCI globalsBufferCI = {

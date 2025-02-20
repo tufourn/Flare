@@ -99,8 +99,32 @@ namespace Flare {
                     );
                 }
             } else {
-                spdlog::error("todo: load image from buffer");
                 // image from buffer
+                cgltf_buffer_view &bufferView = *cgltfImage->buffer_view;
+                const uint8_t *bufferData = static_cast<uint8_t *>(bufferView.buffer->data) + bufferView.offset;
+
+                unsigned char *stbData = stbi_load_from_memory(
+                        static_cast<const unsigned char *>(bufferData),
+                        static_cast<int>(bufferView.size),
+                        &width, &height, &channelCount, STBI_rgb_alpha);
+
+                TextureCI textureCI = {
+                        .width = static_cast<uint16_t>(width),
+                        .height = static_cast<uint16_t>(height),
+                        .depth = 1,
+                        .format = VK_FORMAT_R8G8B8A8_UNORM,
+                        .type = VK_IMAGE_TYPE_2D,
+                        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                };
+
+                images[i] = gpu->createTexture(textureCI);
+
+                asyncLoader->uploadRequests.emplace_back(
+                        UploadRequest{
+                                .texture = gpu->getTexture(images[i]),
+                                .data = stbData, // asyncLoader will free stbData
+                        }
+                );
             }
         }
 
