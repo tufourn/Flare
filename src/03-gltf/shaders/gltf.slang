@@ -3,15 +3,21 @@ struct BindingsOffset {
     uint offset;
 }
 
+struct Globals {
+    float4x4 mvp;
+}
+
 [[vk::push_constant]] ConstantBuffer<BindingsOffset> pc;
 
-[[vk::binding(0,0)]] ByteAddressBuffer g_byteAddressBuffer[];
+[[vk::binding(0,0)]] ConstantBuffer<Globals> g_globals[];
 
-[[vk::binding(0,1)]] Texture2D g_texture2D[];
+[[vk::binding(0,1)]] ByteAddressBuffer g_byteAddressBuffer[];
 
-[[vk::binding(0,2)]] RWTexture2D g_rwTexture2D[];
+[[vk::binding(0,2)]] Texture2D g_texture2D[];
 
-[[vk::binding(0,3)]] SamplerState g_samplerState[];
+[[vk::binding(0,3)]] RWTexture2D g_rwTexture2D[];
+
+[[vk::binding(0,4)]] SamplerState g_samplerState[];
 
 struct GpuMeshDraw {
     uint globalBufferIndex;
@@ -21,10 +27,6 @@ struct GpuMeshDraw {
 
     uint transformOffset;
     float pad[3];
-}
-
-struct Globals {
-    float4x4 mvp;
 }
 
 struct VertexIn {
@@ -47,7 +49,7 @@ VertexOut main(VertexIn input) {
 
     GpuMeshDraw md = g_byteAddressBuffer[pc.bufferIndex].Load<GpuMeshDraw>(pc.offset * 32);
 
-    Globals globals = g_byteAddressBuffer[md.globalBufferIndex].Load<Globals>(0);
+    Globals globals = g_globals[md.globalBufferIndex];
     float4 position = g_byteAddressBuffer[md.positionBufferIndex].Load<float4>(input.vertexIndex * 16);
     float2 uv = g_byteAddressBuffer[md.uvBufferIndex].Load<float2>(input.vertexIndex * 8);
     float4x4 transform = g_byteAddressBuffer[md.transformBufferIndex].Load<float4x4>(md.transformOffset * 64);

@@ -54,6 +54,7 @@ namespace Flare {
         // Init resource pools;
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
         buffers.init(gpuDeviceCI.resourcePoolCI.buffers);
+        uniforms.init(gpuDeviceCI.resourcePoolCI.uniforms);
         textures.init(gpuDeviceCI.resourcePoolCI.textures);
         samplers.init(gpuDeviceCI.resourcePoolCI.samplers);
 
@@ -184,8 +185,8 @@ namespace Flare {
         vkGetPhysicalDeviceMemoryProperties(physicalDevice, &physicalDeviceMemoryProperties);
         spdlog::info("GpuDevice: Using {}", physicalDeviceProperties.deviceName);
 
-        if (physicalDeviceProperties.limits.maxBoundDescriptorSets < 5) {
-            spdlog::error("Physical device does not support 5 bounded descriptor sets");
+        if (physicalDeviceProperties.limits.maxBoundDescriptorSets < SET_COUNT) {
+            spdlog::error("Physical device does not support enough bounded descriptor sets");
         }
 
         // queues, separate family for each queue, todo: same family for queues in case can't find separate family
@@ -494,29 +495,14 @@ namespace Flare {
             }
         }
 
-        SamplerCI defaultSamplerCI = {};
-        defaultSampler = createSampler(defaultSamplerCI);
 
-        uint32_t opaqueWhite = 0xFFFFFFFF;
-        TextureCI defaultTextureCI = {
-                .initialData = &opaqueWhite,
-                .width = 1,
-                .height = 1,
-                .depth = 1,
-                .mipCount = 1,
-                .layerCount = 1,
-                .format = VK_FORMAT_R8G8B8A8_UNORM,
-                .type = VK_IMAGE_TYPE_2D,
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        };
-        defaultTexture = createTexture(defaultTextureCI);
+        createDefaultTextures();
     }
 
     void GpuDevice::shutdown() {
         vkDeviceWaitIdle(device);
 
-        destroySampler(defaultSampler);
-        destroyTexture(defaultTexture);
+        destroyDefaultTextures();
 
         destroyBindlessDescriptorSets();
 
@@ -1106,6 +1092,8 @@ namespace Flare {
                         &buffer->allocationInfo);
 
         buffer->size = ci.size;
+        buffer->name = ci.name;
+        buffer->handle = handle;
 
         VkDescriptorBufferInfo descBuf = {
                 .buffer = buffer->buffer,
@@ -1128,6 +1116,57 @@ namespace Flare {
         return handle;
     }
 
+    Handle<Buffer> GpuDevice::createUniform(const BufferCI &ci) {
+        Handle<Buffer> handle = uniforms.obtain();
+        if (!handle.isValid()) {
+            return handle;
+        }
+
+        Buffer *buffer = uniforms.get(handle);
+
+        VkBufferCreateInfo bufferCI = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .size = ci.size,
+                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | ci.usageFlags,
+        };
+
+        VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
+
+        if (ci.mapped) {
+            allocCI.flags =
+                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
+
+        vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
+                        &buffer->allocationInfo);
+
+        buffer->size = ci.size;
+        buffer->name = ci.name;
+        buffer->handle = handle;
+
+        VkDescriptorBufferInfo descBuf = {
+                .buffer = buffer->buffer,
+                .offset = 0,
+                .range = buffer->size,
+        };
+
+        VkWriteDescriptorSet write = {
+                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet = bindlessDescriptorSets[UNIFORM_BUFFERS_SET],
+                .dstBinding = 0,
+                .dstArrayElement = handle.index,
+                .descriptorCount = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .pBufferInfo = &descBuf,
+        };
+
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+
+        return handle;
+    }
+
     void GpuDevice::destroyBuffer(Handle<Buffer> handle) {
         if (!handle.isValid()) {
             spdlog::error("Invalid buffer handle");
@@ -1139,6 +1178,19 @@ namespace Flare {
         vmaDestroyBuffer(allocator, buffer->buffer, buffer->allocation);
 
         buffers.release(handle);
+    }
+
+    void GpuDevice::destroyUniform(Handle<Buffer> handle) {
+        if (!handle.isValid()) {
+            spdlog::error("Invalid buffer handle");
+            return;
+        }
+
+        Buffer *buffer = uniforms.get(handle);
+
+        vmaDestroyBuffer(allocator, buffer->buffer, buffer->allocation);
+
+        uniforms.release(handle);
     }
 
     void GpuDevice::resizeSwapchain() {
@@ -1166,6 +1218,8 @@ namespace Flare {
         texture->height = ci.height;
         texture->depth = ci.depth;
         texture->format = ci.format;
+        texture->name = ci.name;
+        texture->handle = handle;
 
         VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
         if (ci.format == VK_FORMAT_D32_SFLOAT) {
@@ -1389,7 +1443,11 @@ namespace Flare {
     }
 
     void GpuDevice::createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci) {
-        const std::array<VkDescriptorPoolSize, 5> poolSizes = {
+        const std::array<VkDescriptorPoolSize, SET_COUNT> poolSizes = {
+                VkDescriptorPoolSize{
+                        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                        .descriptorCount = ci.bindlessSetup.uniformBuffers,
+                },
                 VkDescriptorPoolSize{
                         .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                         .descriptorCount = ci.bindlessSetup.storageBuffers,
@@ -1412,7 +1470,8 @@ namespace Flare {
                 }
         };
 
-        uint32_t setCount = ci.bindlessSetup.storageBuffers +
+        uint32_t setCount = ci.bindlessSetup.uniformBuffers +
+                            ci.bindlessSetup.storageBuffers +
                             ci.bindlessSetup.sampledImages +
                             ci.bindlessSetup.storageImages +
                             ci.bindlessSetup.samplers +
@@ -1431,7 +1490,13 @@ namespace Flare {
             spdlog::error("Failed to create bindless descriptor pool");
         }
 
-        const std::array<VkDescriptorSetLayoutBinding, 5> bindlessBindings = {
+        const std::array<VkDescriptorSetLayoutBinding, SET_COUNT> bindlessBindings = {
+                VkDescriptorSetLayoutBinding{
+                        .binding = 0,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                        .descriptorCount = ci.bindlessSetup.uniformBuffers,
+                        .stageFlags = VK_SHADER_STAGE_ALL,
+                },
                 VkDescriptorSetLayoutBinding{
                         .binding = 0,
                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -1474,7 +1539,7 @@ namespace Flare {
                 .pBindingFlags = &flags,
         };
 
-        for (size_t i = 0; i < 5; i++) {
+        for (size_t i = 0; i < bindlessBindings.size(); i++) {
             VkDescriptorSetLayoutCreateInfo setCI = {
                     .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
                     .pNext = &bindlessFlags,
@@ -1506,5 +1571,49 @@ namespace Flare {
             vkDestroyDescriptorSetLayout(device, layout, nullptr);
         }
         vkDestroyDescriptorPool(device, bindlessDescriptorPool, nullptr);
+    }
+
+    Buffer *GpuDevice::getBuffer(Handle<Buffer> handle) {
+        return buffers.get(handle);
+    }
+
+    Buffer *GpuDevice::getUniform(Handle<Buffer> handle) {
+        return uniforms.get(handle);
+    }
+
+    Texture *GpuDevice::getTexture(Handle<Texture> handle) {
+        return textures.get(handle);
+    }
+
+    void GpuDevice::createDefaultTextures() {
+        SamplerCI defaultSamplerCI = {};
+        defaultSampler = createSampler(defaultSamplerCI);
+
+        uint32_t opaqueWhite = 0xFFFFFFFF;
+        uint32_t defaultNormalColor = 0xFFFF8080;
+
+        TextureCI ci = {
+                .initialData = &opaqueWhite,
+                .width = 1,
+                .height = 1,
+                .depth = 1,
+                .mipCount = 1,
+                .layerCount = 1,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        };
+
+        defaultTexture = createTexture(ci);
+
+        ci.initialData = &defaultNormalColor;
+        defaultNormalTexture = createTexture(ci);
+    }
+
+    void GpuDevice::destroyDefaultTextures() {
+        destroySampler(defaultSampler);
+
+        destroyTexture(defaultTexture);
+        destroyTexture(defaultNormalTexture);
     }
 }

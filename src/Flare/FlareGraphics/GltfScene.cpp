@@ -19,7 +19,7 @@ namespace Flare {
         }
         cgltf_load_buffers(&options, data, path.string().c_str());
 
-        textures.resize(data->images_count);
+        images.resize(data->images_count);
         for (size_t i = 0; i < data->images_count; i++) {
             const cgltf_image *cgltfImage = &data->images[i];
             const char *uri = cgltfImage->uri;
@@ -61,11 +61,11 @@ namespace Flare {
                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
                             };
 
-                            textures[i] = gpu->createTexture(textureCI);
+                            images[i] = gpu->createTexture(textureCI);
 
                             asyncLoader->uploadRequests.emplace_back(
                                     UploadRequest{
-                                            .texture = textures[i],
+                                            .texture = gpu->getTexture(images[i]),
                                             .data = stbData, // asyncLoader will free stbData
                                     }
                             );
@@ -76,9 +76,27 @@ namespace Flare {
                         spdlog::error("Invalid embedded image uri");
                     }
                 } else {
-                    spdlog::error("todo: load image from image file");
-                    // image file
+                    std::filesystem::path imageFile = directory / uri;
 
+                    stbi_info(imageFile.string().c_str(), &width, &height, &channelCount);
+
+                    TextureCI textureCI = {
+                            .width = static_cast<uint16_t>(width),
+                            .height = static_cast<uint16_t>(height),
+                            .depth = 1,
+                            .format = VK_FORMAT_R8G8B8A8_UNORM,
+                            .type = VK_IMAGE_TYPE_2D,
+                            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                    };
+
+                    images[i] = gpu->createTexture(textureCI);
+
+                    asyncLoader->fileRequests.emplace_back(
+                            FileRequest{
+                                    .path = imageFile,
+                                    .texture = gpu->getTexture(images[i]),
+                            }
+                    );
                 }
             } else {
                 spdlog::error("todo: load image from buffer");
@@ -102,61 +120,96 @@ namespace Flare {
             samplers[i] = gpu->createSampler(ci);
         }
 
-        gltfTextures.resize(data->textures_count);
+        uint32_t defaultAlbedoOffset = data->textures_count - 1 + DEFAULT_ALBEDO_BASE_OFFSET;
+        uint32_t defaultNormalOffset = data->textures_count - 1 + DEFAULT_NORMAL_BASE_OFFSET;
+        uint32_t defaultMetallicRoughnessOffset = data->textures_count - 1 + DEFAULT_METALLIC_ROUGHNESS_BASE_OFFSET;
+        uint32_t defaultOcclusionOffset = data->textures_count - 1 + DEFAULT_OCCLUSION_BASE_OFFSET;
+        uint32_t defaultEmissiveOffset = data->textures_count - 1 + DEFAULT_EMISSIVE_BASE_OFFSET;
+
+        gltfTextures.resize(data->textures_count + 5); // make space for default textures at end
+
+        gltfTextures[defaultAlbedoOffset] = {gpu->defaultTexture.index, gpu->defaultSampler.index};
+        gltfTextures[defaultNormalOffset] = {gpu->defaultNormalTexture.index, gpu->defaultSampler.index};
+        gltfTextures[defaultMetallicRoughnessOffset] = {gpu->defaultTexture.index, gpu->defaultSampler.index}; //todo
+        gltfTextures[defaultOcclusionOffset] = {gpu->defaultTexture.index, gpu->defaultSampler.index}; //todo
+        gltfTextures[defaultEmissiveOffset] = {gpu->defaultTexture.index, gpu->defaultSampler.index}; //todo
+
         for (size_t i = 0; i < data->textures_count; i++) {
             cgltf_texture &gltfTexture = data->textures[i];
 
             if (gltfTexture.image) {
                 uint32_t textureIndex = gltfTexture.image - data->images;
-                gltfTextures[i].image = textures[textureIndex];
+                gltfTextures[i].imageIndex = images[textureIndex].index;
                 if (gltfTexture.sampler) {
                     uint32_t samplerIndex = gltfTexture.sampler - data->samplers;
-                    gltfTextures[i].sampler = samplers[samplerIndex];
+                    gltfTextures[i].samplerIndex = samplers[samplerIndex].index;
                 } else {
-                    gltfTextures[i].sampler = gpu->defaultSampler;
+                    gltfTextures[i].samplerIndex = gpu->defaultSampler.index;
                 }
             } else {
                 gltfTextures[i] = {
-                        .image = gpu->defaultTexture,
-                        .sampler = gpu->defaultSampler,
+                        .imageIndex = gpu->defaultTexture.index,
+                        .samplerIndex = gpu->defaultSampler.index,
                 };
             }
         }
 
-        materials.resize(data->materials_count);
+        materials.resize(data->materials_count + 1); // + 1 for default material at the back
+
+        Material &defaultMaterial = materials.back();
+
+        defaultMaterial = {
+                .albedoFactor = {1.0, 1.0, 1.0, 1.0},
+                .albedoTextureOffset = defaultAlbedoOffset,
+                .metallicRoughnessTextureOffset = defaultMetallicRoughnessOffset,
+                .normalTextureOffset = defaultNormalOffset,
+                .occlusionTextureOffset = defaultOcclusionOffset,
+                .emissiveTextureOffset = defaultEmissiveOffset,
+                .metallicFactor = 1.f,
+                .roughnessFactor = 1.f,
+        };
+
         for (size_t i = 0; i < data->materials_count; i++) {
             cgltf_material &material = data->materials[i];
 
             if (material.has_pbr_metallic_roughness) {
                 cgltf_pbr_metallic_roughness &metallicRoughness = material.pbr_metallic_roughness;
 
-                materials[i].baseColorFactor = glm::make_vec4(metallicRoughness.base_color_factor);
+                materials[i].albedoFactor = glm::make_vec4(metallicRoughness.base_color_factor);
                 materials[i].metallicFactor = metallicRoughness.metallic_factor;
                 materials[i].roughnessFactor = metallicRoughness.roughness_factor;
 
                 if (metallicRoughness.base_color_texture.texture) {
-                    materials[i].baseTextureOffset = metallicRoughness.base_color_texture.texture - data->textures;
+                    materials[i].albedoTextureOffset = metallicRoughness.base_color_texture.texture - data->textures;
+                } else {
+                    materials[i].albedoTextureOffset = defaultMaterial.albedoTextureOffset;
                 }
 
                 if (metallicRoughness.metallic_roughness_texture.texture) {
                     materials[i].metallicRoughnessTextureOffset =
                             metallicRoughness.metallic_roughness_texture.texture - data->textures;
+                } else {
+                    materials[i].metallicRoughnessTextureOffset = defaultMaterial.metallicRoughnessTextureOffset;
                 }
             }
 
             if (material.normal_texture.texture) {
                 materials[i].normalTextureOffset = material.normal_texture.texture - data->textures;
+            } else {
+                materials[i].normalTextureOffset = defaultMaterial.normalTextureOffset;
             }
 
             if (material.occlusion_texture.texture) {
                 materials[i].occlusionTextureOffset = material.occlusion_texture.texture - data->textures;
+            } else {
+                materials[i].occlusionTextureOffset = defaultMaterial.occlusionTextureOffset;
             }
 
             if (material.emissive_texture.texture) {
                 materials[i].emissiveTextureOffset = material.emissive_texture.texture - data->textures;
+            } else {
+                materials[i].emissiveTextureOffset = defaultMaterial.emissiveTextureOffset;
             }
-
-            //todo: fill material buffer
         }
 
         meshes.resize(data->meshes_count);
@@ -169,6 +222,12 @@ namespace Flare {
 
                 GltfMeshPrimitive meshPrimitive;
                 meshPrimitive.id = meshPrimitiveId++;
+
+                if (primitive.material) {
+                    meshPrimitive.materialOffset = primitive.material - data->materials;
+                } else {
+                    meshPrimitive.materialOffset = materials.size() - 1; // default material at the back
+                }
 
                 if (primitive.indices) {
                     cgltf_accessor &accessor = *primitive.indices;
@@ -203,6 +262,10 @@ namespace Flare {
                     }
                 }
 
+                bool hasNormal = false;
+                bool hasUV = false;
+                bool hasTangent = false;
+
                 for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
                     cgltf_attribute &attribute = primitive.attributes[attr_i];
 
@@ -223,6 +286,7 @@ namespace Flare {
                             break;
                         }
                         case cgltf_attribute_type_normal: { // float3, convert to vec of float4
+                            hasNormal = true;
                             meshPrimitive.normals.resize(accessor.count);
                             const float *normalBuffer = reinterpret_cast<const float *>(bufferData);
 
@@ -233,6 +297,7 @@ namespace Flare {
                             break;
                         }
                         case cgltf_attribute_type_texcoord: { // assume float2
+                            hasUV = true;
                             meshPrimitive.uvs.resize(accessor.count);
                             memcpy(meshPrimitive.uvs.data(), bufferData, accessor.count * sizeof(glm::vec2));
                             break;
@@ -245,6 +310,14 @@ namespace Flare {
                         default:
                             break;
                     }
+                }
+
+                if (!hasNormal) {
+                    meshPrimitive.normals = std::vector<glm::vec4>(meshPrimitive.positions.size());
+                }
+
+                if (!hasUV) {
+                    meshPrimitive.uvs = std::vector<glm::vec2>(meshPrimitive.positions.size());
                 }
 
                 meshes[i].meshPrimitives.push_back(meshPrimitive);
@@ -295,7 +368,7 @@ namespace Flare {
             cgltf_free(data);
         }
 
-        for (auto &handle: textures) {
+        for (auto &handle: images) {
             gpu->destroyTexture(handle);
         }
         for (auto &handle: samplers) {
@@ -311,6 +384,7 @@ namespace Flare {
                 MeshDraw meshDraw;
                 meshDraw.transformOffset = transforms.size();
                 transforms.push_back(node->worldTransform);
+                meshDraw.materialOffset = meshPrim.materialOffset;
 
                 //todo: material
 

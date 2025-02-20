@@ -4,6 +4,7 @@
 #include <slang-com-ptr.h>
 #include <slang-com-helper.h>
 #include <filesystem>
+#include <shaderc/shaderc.hpp>
 
 #include "GpuResources.h"
 
@@ -17,10 +18,11 @@ namespace Flare {
 
         std::vector<uint32_t> compileSlang(const std::filesystem::path &path);
 
-        static std::vector<uint32_t> compileGLSL(const std::filesystem::path &path);
+        std::vector<uint32_t> compileGLSL(const std::filesystem::path &path);
 
         void diagnose(slang::IBlob *diagnosticsBlob);
 
         Slang::ComPtr <slang::IGlobalSession> globalSession;
+        shaderc::Compiler shadercCompiler;
     };
 }

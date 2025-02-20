@@ -6,15 +6,19 @@
 
 namespace Flare {
     struct UploadRequest {
-        Handle<Texture> texture;
-        Handle<Buffer> dstBuffer;
-        Handle<Buffer> srcBuffer;
+        Texture *texture = nullptr;
+        Buffer *dstBuffer = nullptr;
+        Buffer *srcBuffer = nullptr;
+//        Handle<Texture> texture;
+//        Handle<Buffer> dstBuffer;
+//        Handle<Buffer> srcBuffer;
         void *data = nullptr;
     };
 
     struct FileRequest {
         std::filesystem::path path;
-        Handle<Texture> texture;
+        Texture *texture;
+//        Handle<Texture> texture;
     };
 
     struct AsyncLoader {
@@ -32,10 +36,10 @@ namespace Flare {
         std::vector<FileRequest> fileRequests;
 
         std::mutex textureMutex;
-        std::vector<Handle<Texture>> pendingTextures;
+        std::vector<Texture*> pendingTextures;
 
         std::mutex bufferMutex;
-        std::vector<Handle<Buffer>> pendingBuffers;
+        std::vector<Buffer*> pendingBuffers;
 
         void init(GpuDevice &gpuDevice);
 

@@ -126,7 +126,6 @@ namespace Flare {
     }
 
     std::vector<uint32_t> ShaderCompiler::compileGLSL(const std::filesystem::path &path) {
-        shaderc::Compiler compiler;
         shaderc::CompileOptions options;
 
         std::ifstream shaderFile(path);
@@ -153,7 +152,7 @@ namespace Flare {
             return {};
         }
 
-        shaderc::SpvCompilationResult result = compiler.CompileGlslToSpv(shaderCode, shaderKind,
+        shaderc::SpvCompilationResult result = shadercCompiler.CompileGlslToSpv(shaderCode, shaderKind,
                                                                          path.string().c_str(), options);
 
         if (result.GetCompilationStatus() != shaderc_compilation_status_success) {

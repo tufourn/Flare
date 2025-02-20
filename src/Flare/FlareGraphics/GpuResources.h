@@ -159,6 +159,7 @@ namespace Flare {
         size_t size = 0;
         VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
         bool mapped = false;
+        std::string name;
     };
 
     struct Buffer {
@@ -166,6 +167,9 @@ namespace Flare {
         VmaAllocation allocation;
         VmaAllocationInfo allocationInfo;
         size_t size;
+
+        Handle<Buffer> handle;
+        std::string name;
     };
 
     struct SamplerCI {
@@ -192,6 +196,7 @@ namespace Flare {
         VkFormat format = VK_FORMAT_UNDEFINED;
         VkImageType type = VK_IMAGE_TYPE_MAX_ENUM;
         VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+        std::string name;
     };
 
     struct Texture {
@@ -203,5 +208,8 @@ namespace Flare {
         uint16_t width = 1;
         uint16_t height = 1;
         uint16_t depth = 1;
+
+        Handle<Texture> handle;
+        std::string name;
     };
 }

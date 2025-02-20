@@ -62,6 +62,8 @@ namespace Flare {
             FileRequest fileRequest = fileRequests.back();
             fileRequests.pop_back();
 
+            spdlog::info("loading {}", fileRequest.path.string());
+
             int width, height, component;
             unsigned char *stbData = stbi_load(fileRequest.path.string().c_str(),
                                                &width, &height, &component, STBI_rgb_alpha);
@@ -93,11 +95,9 @@ namespace Flare {
 
             vkBeginCommandBuffer(cmd, &beginInfo);
 
-            if (request.texture.isValid() && request.data) {
-                Texture *texture = gpu->textures.get(request.texture);
-
+            if (request.texture && request.data) {
                 constexpr size_t channelCount = 4;
-                const size_t imageSize = texture->width * texture->height * channelCount;
+                const size_t imageSize = request.texture->width * request.texture->height * channelCount;
 
                 const size_t alignedImageSize = VkHelper::memoryAlign(imageSize, 4);
                 size_t offset = std::atomic_fetch_add(&stagingBufferOffset, alignedImageSize);
@@ -117,7 +117,7 @@ namespace Flare {
                         .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
                         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                        .image = texture->image,
+                        .image = request.texture->image,
                         .subresourceRange = {
                                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                 .baseMipLevel = 0,
@@ -151,9 +151,9 @@ namespace Flare {
                         },
                         .imageOffset = {0, 0, 0},
                         .imageExtent = {
-                                .width = texture->width,
-                                .height = texture->height,
-                                .depth = texture->depth,
+                                .width = request.texture->width,
+                                .height = request.texture->height,
+                                .depth = request.texture->depth,
                         },
                 };
 
@@ -161,7 +161,7 @@ namespace Flare {
                         .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
                         .pNext = nullptr,
                         .srcBuffer = stagingBuffer->buffer,
-                        .dstImage = texture->image,
+                        .dstImage = request.texture->image,
                         .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                         .regionCount = 1,
                         .pRegions = &region,
@@ -180,7 +180,7 @@ namespace Flare {
                         .newLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
                         .srcQueueFamilyIndex = gpu->transferFamily,
                         .dstQueueFamilyIndex = gpu->mainFamily,
-                        .image = texture->image,
+                        .image = request.texture->image,
                         .subresourceRange = {
                                 .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                 .baseMipLevel = 0,
@@ -201,40 +201,35 @@ namespace Flare {
                 vkCmdPipelineBarrier2(cmd, &postCopyDep);
 
                 free(request.data);
-            } else if (request.srcBuffer.isValid() && request.dstBuffer.isValid()) {
-                Buffer* srcBuffer = gpu->buffers.get(request.srcBuffer);
-                Buffer* dstBuffer = gpu->buffers.get(request.dstBuffer);
-
+            } else if (request.srcBuffer && request.dstBuffer) {
                 VkBufferCopy region = {
                         .srcOffset = 0,
                         .dstOffset = 0,
-                        .size = srcBuffer->size,
+                        .size = request.srcBuffer->size,
                 };
 
-                vkCmdCopyBuffer(cmd, srcBuffer->buffer, dstBuffer->buffer, 1, &region);
-            } else if (request.dstBuffer.isValid()) {
-                Buffer *dstBuffer = gpu->buffers.get(request.dstBuffer);
-
-                const size_t alignedBufferSize = VkHelper::memoryAlign(dstBuffer->size, 64);
+                vkCmdCopyBuffer(cmd, request.srcBuffer->buffer, request.dstBuffer->buffer, 1, &region);
+            } else if (request.dstBuffer) {
+                const size_t alignedBufferSize = VkHelper::memoryAlign(request.dstBuffer->size, 64);
                 size_t offset = std::atomic_fetch_add(&stagingBufferOffset, alignedBufferSize);
 
                 Buffer *stagingBuffer = gpu->buffers.get(stagingBufferHandle);
                 memcpy(static_cast<std::byte *>(stagingBuffer->allocationInfo.pMappedData) + offset,
-                       request.data, dstBuffer->size);
+                       request.data, request.dstBuffer->size);
 
                 VkBufferCopy2 region = {
                         .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
                         .pNext = nullptr,
                         .srcOffset = offset,
                         .dstOffset = 0,
-                        .size = dstBuffer->size,
+                        .size = request.dstBuffer->size,
                 };
 
                 VkCopyBufferInfo2 copyInfo = {
                         .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                         .pNext = nullptr,
                         .srcBuffer = stagingBuffer->buffer,
-                        .dstBuffer = dstBuffer->buffer,
+                        .dstBuffer = request.dstBuffer->buffer,
                         .regionCount = 1,
                         .pRegions = &region,
                 };
@@ -250,9 +245,9 @@ namespace Flare {
                         .dstAccessMask = 0,
                         .srcQueueFamilyIndex = gpu->transferFamily,
                         .dstQueueFamilyIndex = gpu->mainFamily,
-                        .buffer = dstBuffer->buffer,
+                        .buffer = request.dstBuffer->buffer,
                         .offset = 0,
-                        .size = dstBuffer->size,
+                        .size = request.dstBuffer->size,
                 };
 
                 VkDependencyInfo depInfo = {
@@ -284,10 +279,10 @@ namespace Flare {
 
             vkQueueSubmit2(gpu->transferQueue, 1, &submitInfo, transferFence);
 
-            if (request.texture.isValid()) {
+            if (request.texture) {
                 std::lock_guard<std::mutex> lock(textureMutex);
                 pendingTextures.push_back(request.texture);
-            } else if (request.dstBuffer.isValid()) {
+            } else if (request.dstBuffer) {
                 std::lock_guard<std::mutex> lock(bufferMutex);
                 pendingBuffers.push_back(request.dstBuffer);
             }
@@ -303,9 +298,7 @@ namespace Flare {
             return;
         }
 
-        for (const auto& handle : pendingTextures) {
-            Texture* texture = gpu->textures.get(handle);
-
+        for (const auto& texture : pendingTextures) {
             VkImageMemoryBarrier2 barrier = {
                     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                     .pNext = nullptr,
@@ -348,9 +341,7 @@ namespace Flare {
             return;
         }
 
-        for (const auto& handle : pendingBuffers) {
-            Buffer* buffer = gpu->buffers.get(handle);
-
+        for (const auto& buffer : pendingBuffers) {
             VkBufferMemoryBarrier2 barrier = {
                     .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                     .pNext = nullptr,

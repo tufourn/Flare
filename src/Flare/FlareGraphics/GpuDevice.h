@@ -15,11 +15,13 @@ struct GLFWwindow;
 namespace Flare {
     static constexpr uint32_t FRAMES_IN_FLIGHT = 2;
 
-    static constexpr uint32_t STORAGE_BUFFERS_SET = 0;
-    static constexpr uint32_t SAMPLED_IMAGES_SET = 1;
-    static constexpr uint32_t STORAGE_IMAGES_SET = 2;
-    static constexpr uint32_t SAMPLERS_SET = 3;
-    static constexpr uint32_t ACCEL_STRUCT_SET = 4;
+    static constexpr uint32_t UNIFORM_BUFFERS_SET = 0;
+    static constexpr uint32_t STORAGE_BUFFERS_SET = 1;
+    static constexpr uint32_t SAMPLED_IMAGES_SET = 2;
+    static constexpr uint32_t STORAGE_IMAGES_SET = 3;
+    static constexpr uint32_t SAMPLERS_SET = 4;
+    static constexpr uint32_t ACCEL_STRUCT_SET = 5;
+    static constexpr uint32_t SET_COUNT = 6;
 
     struct PushConstants {
         uint32_t bindingsOffset;
@@ -29,11 +31,13 @@ namespace Flare {
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
         uint32_t buffers = 256;
+        uint32_t uniforms = 256;
         uint32_t textures = 256;
         uint32_t samplers = 256;
     };
 
     struct BindlessSetup {
+        uint32_t uniformBuffers = 512 * 1024;
         uint32_t storageBuffers = 512 * 1024;
         uint32_t sampledImages = 512 * 1024;
         uint32_t storageImages = 64 * 1024;
@@ -82,6 +86,16 @@ namespace Flare {
 
         void destroyBuffer(Handle<Buffer> handle);
 
+        Handle<Buffer> createUniform(const BufferCI &ci);
+
+        void destroyUniform(Handle<Buffer> handle);
+
+        Buffer *getBuffer(Handle<Buffer> handle);
+
+        Buffer *getUniform(Handle<Buffer> handle);
+
+        Texture* getTexture(Handle<Texture> handle);
+
         Handle<Texture> createTexture(const TextureCI &ci);
 
         void destroyTexture(Handle<Texture> handle);
@@ -90,9 +104,13 @@ namespace Flare {
 
         void destroySampler(Handle<Sampler> handle);
 
-        void createBindlessDescriptorSets(const GpuDeviceCreateInfo& ci);
+        void createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci);
 
         void destroyBindlessDescriptorSets();
+
+        void createDefaultTextures();
+
+        void destroyDefaultTextures();
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
@@ -137,16 +155,18 @@ namespace Flare {
         uint32_t transferFamily;
 
         VkDescriptorPool bindlessDescriptorPool;
-        std::array<VkDescriptorSetLayout, 5> bindlessDescriptorSetLayouts;
-        std::array<VkDescriptorSet, 5> bindlessDescriptorSets;
+        std::array<VkDescriptorSetLayout, SET_COUNT> bindlessDescriptorSetLayouts;
+        std::array<VkDescriptorSet, SET_COUNT> bindlessDescriptorSets;
 
         VmaAllocator allocator;
 
         Handle<Sampler> defaultSampler;
         Handle<Texture> defaultTexture;
+        Handle<Texture> defaultNormalTexture;
 
         ResourcePool<Pipeline> pipelines;
         ResourcePool<Buffer> buffers;
+        ResourcePool<Buffer> uniforms;
         ResourcePool<Texture> textures;
         ResourcePool<Sampler> samplers;
     };
