@@ -72,6 +72,7 @@ void main() {
     vec4 position = transform * positionBuffer[glob.positionBufferIndex].positions[gl_VertexIndex];
     gl_Position = glob.mvp * position;
 
+
     outFragPos = position.xyz;
     outUV = uvBuffer[glob.uvBufferIndex].uvs[gl_VertexIndex];
     outNormal = mat3(transpose(inverse(transform))) * normalBuffer[glob.normalBufferIndex].normals[gl_VertexIndex].xyz;

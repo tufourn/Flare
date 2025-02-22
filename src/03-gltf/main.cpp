@@ -79,10 +79,10 @@ struct TriangleApp : Application {
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
 //        gltf.init("assets/Triangle.gltf", &gpu, &asyncLoader);
-//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/structure.glb", &gpu, &asyncLoader);
-        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -436,8 +436,8 @@ struct TriangleApp : Application {
 int main() {
     Flare::ApplicationConfig appConfig{};
     appConfig
-            .setWidth(800)
-            .setHeight(600)
+            .setWidth(1280)
+            .setHeight(720)
             .setName("Triangle");
 
     TriangleApp app;

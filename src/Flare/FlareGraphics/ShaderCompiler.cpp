@@ -14,8 +14,8 @@ namespace Flare {
 
     }
 
-    std::vector<uint32_t> ShaderCompiler::compileSlang(const std::filesystem::path &path) {
-        if (!std::filesystem::exists(path)) {
+    std::vector<uint32_t> ShaderCompiler::compileSlang(const fs::path &path) {
+        if (!fs::exists(path)) {
             spdlog::error("ShaderCompiler: {} doesn't exist", path.string());
             return {};
         }
@@ -125,7 +125,34 @@ namespace Flare {
         }
     }
 
-    std::vector<uint32_t> ShaderCompiler::compileGLSL(const std::filesystem::path &path) {
+    std::vector<uint32_t> ShaderCompiler::compileGLSL(const fs::path &path) {
+        std::vector<uint32_t> spirv;
+
+        fs::path spvPath = path;
+        spvPath += ".spv";
+
+//      use cached spirv if exists and newer than glsl
+        if (fs::exists(spvPath) && fs::last_write_time(spvPath) >= fs::last_write_time(path)) {
+            spdlog::info("Using cached SPIR-V: {}", spvPath.string());
+
+            std::ifstream spvFile(spvPath, std::ios::binary | std::ios::ate);
+            if (!spvFile.is_open()) {
+                spdlog::error("Failed to open cached SPIR-V file: {}", spvPath.string());
+                return {};
+            }
+
+            size_t fileSize = spvFile.tellg();
+            spvFile.seekg(0);
+
+            spirv.resize(fileSize / sizeof(uint32_t));
+            spvFile.read(reinterpret_cast<char *>(spirv.data()), fileSize);
+            spvFile.close();
+
+            spdlog::info("Loaded SPIR-V from {} ({} bytes)", spvPath.string(), fileSize);
+            return spirv;
+        }
+
+        // otherwise compile
         shaderc::CompileOptions options;
 
         std::ifstream shaderFile(path);
@@ -153,20 +180,27 @@ namespace Flare {
         }
 
         shaderc::SpvCompilationResult result = shadercCompiler.CompileGlslToSpv(shaderCode, shaderKind,
-                                                                         path.string().c_str(), options);
+                                                                                path.string().c_str(), options);
 
         if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
             spdlog::error("Shader compilation failed: {}", result.GetErrorMessage());
             return {};
         }
 
-        std::vector<uint32_t> spirv;
         spirv.assign(result.cbegin(), result.cend());
 
         assert(spirv[0] == SPIRV_MAGIC_NUMBER);
 
-        spdlog::info("ShaderCompiler: Compiled {} with {} bytes of data",
-                     path.string(), spirv.size() * sizeof(uint32_t));
+        spdlog::info("ShaderCompiler: Compiled {} ({} bytes)", path.string(), spirv.size() * sizeof(uint32_t));
+
+        std::ofstream spvFile(spvPath, std::ios::binary);
+        if (!spvFile.is_open()) {
+            spdlog::error("Failed to save compiled SPIR-V file: {}", spvPath.string());
+        } else {
+            spvFile.write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
+            spvFile.close();
+            spdlog::info("Saved SPIR-V to: {}", spvPath.string());
+        }
 
         return spirv;
     }
