@@ -61,6 +61,14 @@ namespace Flare {
             }
         }
 
+        void swap(Handle<T> l, Handle<T> r) {
+            if (!l.isValid() || !r.isValid()) {
+                spdlog::error("ResourcePool: Attempting to swap invalid handles");
+                return;
+            }
+            std::swap(data[l.index], data[r.index]);
+        }
+
         T *get(Handle<T> handle) {
             if (handle.isValid() && handle.index < poolSize) {
                 return &data[handle.index];

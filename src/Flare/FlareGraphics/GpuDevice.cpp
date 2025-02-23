@@ -673,18 +673,17 @@ namespace Flare {
     }
 
     Handle<Pipeline> GpuDevice::createPipeline(const PipelineCI &ci) {
-        Handle<Pipeline> handle = pipelines.obtain();
-        if (!handle.isValid()) {
-            return handle;
-        }
-
-        Pipeline *pipeline = pipelines.get(handle);
-
         std::vector<VkShaderModule> modules;
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
 
+        bool shaderCompileSuccess = true;
         for (const auto &shaderStage: ci.shaderStages) {
             std::vector<uint32_t> spirv = shaderCompiler.compileGLSL(shaderStage.path);
+            if (spirv.empty()) {
+                spdlog::error("Failed to compile {}", shaderStage.path.string());
+                shaderCompileSuccess = false;
+                break;
+            }
 
             VkShaderModuleCreateInfo shaderModuleCI{
                     .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -697,6 +696,8 @@ namespace Flare {
             VkShaderModule shaderModule;
             if (vkCreateShaderModule(device, &shaderModuleCI, nullptr, &shaderModule) != VK_SUCCESS) {
                 spdlog::error("Failed to create shader module");
+                shaderCompileSuccess = false;
+                break;
             }
             modules.push_back(shaderModule);
 
@@ -710,6 +711,16 @@ namespace Flare {
                     .pSpecializationInfo = nullptr,
             });
         }
+
+        if (!shaderCompileSuccess) {
+            for (const auto& module : modules) {
+                vkDestroyShaderModule(device, module, nullptr);
+            }
+            return {}; // return invalid pipeline handle
+        }
+
+        Handle<Pipeline> handle = pipelines.obtain();
+        Pipeline *pipeline = pipelines.get(handle);
 
         VkPushConstantRange pcRange = {
                 .stageFlags = VK_SHADER_STAGE_ALL,
@@ -1642,8 +1653,12 @@ namespace Flare {
 
         vkDeviceWaitIdle(device);
 
-        destroyPipeline(handle);
         Handle<Pipeline> recreatedHandle = createPipeline(ci);
-        assert(recreatedHandle.index == handle.index);
+        if (!recreatedHandle.isValid()) {
+            spdlog::error("Failed to recreate pipeline, using old pipeline");
+            return;
+        }
+        pipelines.swap(handle, recreatedHandle);
+        destroyPipeline(recreatedHandle); // destroy old pipeline
     }
 }
