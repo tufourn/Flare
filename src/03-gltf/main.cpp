@@ -370,7 +370,9 @@ struct TriangleApp : Application {
                 vkCmdEndRendering(cmd);
 
                 ImGui::Begin("Light");
-                ImGui::SliderFloat3("Light", reinterpret_cast<float *>(&globals.light.position), -100.f, 100.f);
+                ImGui::SliderFloat3("Light position", reinterpret_cast<float *>(&globals.light.position), -50.f, 50.f);
+                ImGui::SliderFloat3("Light color", reinterpret_cast<float *>(&globals.light.color), 0.f, 1.f);
+                ImGui::SliderFloat("Light intensity", reinterpret_cast<float *>(&globals.light.intensity), 0.f, 100.f);
                 if (ImGui::Button("Reload pipeline")) {
                     shouldReloadPipeline = true;
                 }
