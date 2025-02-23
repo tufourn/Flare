@@ -9,6 +9,7 @@
 #include <array>
 
 #include "GpuResources.h"
+#include "ShaderCompiler.h"
 
 struct GLFWwindow;
 
@@ -79,6 +80,8 @@ namespace Flare {
 
         Handle<Pipeline> createPipeline(const PipelineCI &ci);
 
+        void recreatePipeline(Handle<Pipeline> handle, const PipelineCI &ci);
+
         void destroyPipeline(Handle<Pipeline> handle);
 
         Handle<Buffer> createBuffer(const BufferCI &ci);
@@ -93,7 +96,7 @@ namespace Flare {
 
         Buffer *getUniform(Handle<Buffer> handle);
 
-        Texture* getTexture(Handle<Texture> handle);
+        Texture *getTexture(Handle<Texture> handle);
 
         Handle<Texture> createTexture(const TextureCI &ci);
 
@@ -113,6 +116,8 @@ namespace Flare {
 
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
+
+        ShaderCompiler shaderCompiler;
 
         GLFWwindow *glfwWindow;
         VkSurfaceKHR surface;

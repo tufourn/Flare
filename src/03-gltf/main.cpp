@@ -60,14 +60,8 @@ struct TriangleApp : Application {
         gpu.init(gpuDeviceCI);
         asyncLoader.init(gpu);
 
-        shaderCompiler.init();
-
-        std::vector<uint32_t> vertShader = shaderCompiler.compileGLSL("shaders/gltf.vert");
-        std::vector<uint32_t> fragShader = shaderCompiler.compileGLSL("shaders/gltf.frag");
-
-        PipelineCI pipelineCI;
-        pipelineCI.shaderStages.addBinary({VK_SHADER_STAGE_VERTEX_BIT, vertShader});
-        pipelineCI.shaderStages.addBinary({VK_SHADER_STAGE_FRAGMENT_BIT, fragShader});
+        pipelineCI.shaderStages.emplace_back(ShaderStage{"shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT});
+        pipelineCI.shaderStages.emplace_back(ShaderStage{"shaders/gltf.frag", VK_SHADER_STAGE_FRAGMENT_BIT});
         pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
         pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
         pipelineCI.depthStencil = {
@@ -363,6 +357,9 @@ struct TriangleApp : Application {
 
                 ImGui::Begin("Light");
                 ImGui::SliderFloat3("Light", reinterpret_cast<float *>(&globals.light.position), -10.f, 10.f);
+                if (ImGui::Button("Reload pipeline")) {
+                    shouldReloadPipeline = true;
+                }
                 ImGui::End();
 
                 ImGui::Render();
@@ -376,6 +373,11 @@ struct TriangleApp : Application {
 
                 globalsRingBuffer.moveToNextBuffer();
                 gpu.present();
+
+                if (shouldReloadPipeline) {
+                    gpu.recreatePipeline(pipelineHandle, pipelineCI);
+                    shouldReloadPipeline = false;
+                }
 //                spdlog::info("{}", gpu.absoluteFrame);
             }
         }
@@ -408,9 +410,10 @@ struct TriangleApp : Application {
 
     Flare::GpuDevice gpu;
     Flare::Window window;
-    Flare::ShaderCompiler shaderCompiler;
     Flare::AsyncLoader asyncLoader;
 
+    bool shouldReloadPipeline = false;
+    PipelineCI pipelineCI;
     Handle<Pipeline> pipelineHandle;
 
     RingBuffer globalsRingBuffer;

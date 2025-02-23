@@ -51,6 +51,9 @@ namespace Flare {
         // Set window
         glfwWindow = gpuDeviceCI.glfwWindow;
 
+        // Shader compiler
+        shaderCompiler.init();
+
         // Init resource pools;
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
         buffers.init(gpuDeviceCI.resourcePoolCI.buffers);
@@ -506,6 +509,8 @@ namespace Flare {
     void GpuDevice::shutdown() {
         vkDeviceWaitIdle(device);
 
+        shaderCompiler.shutdown();
+
         destroyDefaultTextures();
 
         destroyBindlessDescriptorSets();
@@ -678,13 +683,15 @@ namespace Flare {
         std::vector<VkShaderModule> modules;
         std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
 
-        for (const auto &shaderBinary: ci.shaderStages.shaderBinaries) {
+        for (const auto &shaderStage: ci.shaderStages) {
+            std::vector<uint32_t> spirv = shaderCompiler.compileGLSL(shaderStage.path);
+
             VkShaderModuleCreateInfo shaderModuleCI{
                     .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
                     .pNext = nullptr,
                     .flags = 0,
-                    .codeSize = shaderBinary.spirv.size() * sizeof(uint32_t),
-                    .pCode = shaderBinary.spirv.data(),
+                    .codeSize = spirv.size() * sizeof(uint32_t),
+                    .pCode = spirv.data(),
             };
 
             VkShaderModule shaderModule;
@@ -697,7 +704,7 @@ namespace Flare {
                     .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                     .pNext = nullptr,
                     .flags = 0,
-                    .stage = shaderBinary.stage,
+                    .stage = shaderStage.stage,
                     .module = shaderModule,
                     .pName = "main",
                     .pSpecializationInfo = nullptr,
@@ -1625,5 +1632,18 @@ namespace Flare {
 
         destroyTexture(defaultTexture);
         destroyTexture(defaultNormalTexture);
+    }
+
+    void GpuDevice::recreatePipeline(Handle<Pipeline> handle, const PipelineCI &ci) {
+        if (!handle.isValid()) {
+            spdlog::error("Invalid pipeline handle");
+            return;
+        }
+
+        vkDeviceWaitIdle(device);
+
+        destroyPipeline(handle);
+        Handle<Pipeline> recreatedHandle = createPipeline(ci);
+        assert(recreatedHandle.index == handle.index);
     }
 }

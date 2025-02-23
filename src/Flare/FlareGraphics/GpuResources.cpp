@@ -42,9 +42,4 @@ namespace Flare {
             );
         }
     }
-
-    ShaderStageCI &ShaderStageCI::addBinary(ShaderBinary binary) {
-        shaderBinaries.push_back(binary);
-        return *this;
-    }
 }

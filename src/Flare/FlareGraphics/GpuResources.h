@@ -9,6 +9,7 @@
 #include <vk_mem_alloc.h>
 #include <map>
 #include <glm/glm.hpp>
+#include <filesystem>
 
 namespace Flare {
     constexpr uint32_t invalidIndex = 0xFFFFFFFF;
@@ -70,15 +71,9 @@ namespace Flare {
         }
     };
 
-    struct ShaderBinary {
+    struct ShaderStage {
+        std::filesystem::path path;
         VkShaderStageFlagBits stage = VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
-        const std::vector<uint32_t> &spirv;
-    };
-
-    struct ShaderStageCI {
-        std::vector<ShaderBinary> shaderBinaries;
-
-        ShaderStageCI &addBinary(ShaderBinary binary);
     };
 
     struct VertexInputCI {
@@ -142,7 +137,7 @@ namespace Flare {
     };
 
     struct PipelineCI {
-        ShaderStageCI shaderStages;
+        std::vector<ShaderStage> shaderStages;
         VertexInputCI vertexInput;
         RasterizationCI rasterization;
         DepthStencilCI depthStencil;
