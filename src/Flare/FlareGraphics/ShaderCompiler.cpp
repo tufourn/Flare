@@ -133,8 +133,6 @@ namespace Flare {
 
 //      use cached spirv if exists and newer than glsl
         if (fs::exists(spvPath) && fs::last_write_time(spvPath) >= fs::last_write_time(path)) {
-            spdlog::info("Using cached SPIR-V: {}", spvPath.string());
-
             std::ifstream spvFile(spvPath, std::ios::binary | std::ios::ate);
             if (!spvFile.is_open()) {
                 spdlog::error("Failed to open cached SPIR-V file: {}", spvPath.string());

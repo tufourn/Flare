@@ -54,6 +54,7 @@ namespace Flare {
         std::vector<uint32_t> indices;
         std::vector<glm::vec4> normals;
         std::vector<glm::vec2> uvs;
+        std::vector<glm::vec4> tangents;
         uint32_t materialOffset;
     };
 
@@ -94,6 +95,7 @@ namespace Flare {
         std::vector<uint32_t> indices;
         std::vector<glm::vec2> uvs;
         std::vector<glm::vec4> normals;
+        std::vector<glm::vec4> tangents;
         std::vector<glm::mat4> transforms;
 
         std::vector<MeshDraw> meshDraws;

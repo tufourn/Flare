@@ -28,7 +28,7 @@ struct TriangleApp : Application {
         uint32_t textureBufferIndex;
         uint32_t materialBufferIndex;
         uint32_t meshDrawBufferIndex;
-        float pad;
+        uint32_t tangentBufferIndex;
 
         Light light;
     };
@@ -73,10 +73,10 @@ struct TriangleApp : Application {
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
 //        gltf.init("assets/Triangle.gltf", &gpu, &asyncLoader);
-        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/structure.glb", &gpu, &asyncLoader);
-//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -134,6 +134,19 @@ struct TriangleApp : Application {
                 UploadRequest{
                         .dstBuffer = gpu.getBuffer(uvBufferHandle),
                         .data = (void *) gltf.uvs.data(),
+                }
+        );
+
+        BufferCI tangentCI = {
+                .size = sizeof(glm::vec4) * gltf.tangents.size(),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .name = "tangents",
+        };
+        tangentBufferHandle = gpu.createBuffer(tangentCI);
+        asyncLoader.uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = gpu.getBuffer(tangentBufferHandle),
+                        .data = (void *) gltf.tangents.data(),
                 }
         );
 
@@ -214,6 +227,7 @@ struct TriangleApp : Application {
         globals.textureBufferIndex = textureIndicesHandle.index;
         globals.materialBufferIndex = materialBufferHandle.index;
         globals.meshDrawBufferIndex = meshDrawBufferHandle.index;
+        globals.tangentBufferIndex = tangentBufferHandle.index;
 
         globals.light = {
                 .position = {0.f, 4.f, 0.f},
@@ -356,7 +370,7 @@ struct TriangleApp : Application {
                 vkCmdEndRendering(cmd);
 
                 ImGui::Begin("Light");
-                ImGui::SliderFloat3("Light", reinterpret_cast<float *>(&globals.light.position), -10.f, 10.f);
+                ImGui::SliderFloat3("Light", reinterpret_cast<float *>(&globals.light.position), -100.f, 100.f);
                 if (ImGui::Button("Reload pipeline")) {
                     shouldReloadPipeline = true;
                 }
@@ -402,6 +416,7 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(materialBufferHandle);
         gpu.destroyBuffer(normalBufferHandle);
         gpu.destroyBuffer(indirectDrawBufferHandle);
+        gpu.destroyBuffer(tangentBufferHandle);
 
         asyncLoader.shutdown();
         gpu.shutdown();
@@ -421,6 +436,7 @@ struct TriangleApp : Application {
     Handle<Buffer> indexBufferHandle;
     Handle<Buffer> transformBufferHandle;
     Handle<Buffer> uvBufferHandle;
+    Handle<Buffer> tangentBufferHandle;
     Handle<Buffer> meshDrawBufferHandle;
     Handle<Buffer> textureIndicesHandle;
     Handle<Buffer> materialBufferHandle;

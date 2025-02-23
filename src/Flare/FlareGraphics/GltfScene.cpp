@@ -3,6 +3,7 @@
 #include "GpuDevice.h"
 #include "VkHelper.h"
 #include "glm/gtc/type_ptr.hpp"
+#include "CalcTangent.h"
 #include <stb_image.h>
 
 namespace Flare {
@@ -327,7 +328,9 @@ namespace Flare {
                             break;
                         }
                         case cgltf_attribute_type_tangent: {
-                            //todo
+                            hasTangent = true;
+                            meshPrimitive.tangents.resize(accessor.count);
+                            memcpy(meshPrimitive.tangents.data(), bufferData, accessor.count * sizeof(glm::vec4));
                             break;
                         }
                             // todo: handle weights and joints stuff for skinning
@@ -342,6 +345,19 @@ namespace Flare {
 
                 if (!hasUV) {
                     meshPrimitive.uvs = std::vector<glm::vec2>(meshPrimitive.positions.size());
+                }
+
+                if (!hasTangent) {
+                    meshPrimitive.tangents.resize(meshPrimitive.positions.size());
+                    CalcTangent mikktspace;
+                    CalcTangentData calcTangentData = {
+                            .indices = meshPrimitive.indices,
+                            .positions = meshPrimitive.positions,
+                            .normals = meshPrimitive.normals,
+                            .uvs = meshPrimitive.uvs,
+                            .tangents = meshPrimitive.tangents,
+                    };
+                    mikktspace.calculate(&calcTangentData);
                 }
 
                 meshes[i].meshPrimitives.push_back(meshPrimitive);
@@ -422,6 +438,7 @@ namespace Flare {
                     positions.insert(positions.end(), meshPrim.positions.begin(), meshPrim.positions.end());
                     normals.insert(normals.end(), meshPrim.normals.begin(), meshPrim.normals.end());
                     uvs.insert(uvs.end(), meshPrim.uvs.begin(), meshPrim.uvs.end());
+                    tangents.insert(tangents.end(), meshPrim.tangents.begin(), meshPrim.tangents.end());
 
                     map.insert({meshPrim.id, {meshDraw}});
                 } else { // reuse values from mesh primitive with same id //todo: skinned mesh with different offsets

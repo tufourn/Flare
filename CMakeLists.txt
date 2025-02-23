@@ -109,6 +109,17 @@ add_library(flare-spirv-cross STATIC
         ${spirv-cross_SOURCE_DIR}/spirv_cfg.cpp
 )
 
+FetchContent_Declare(
+        mikktspace
+        GIT_REPOSITORY https://github.com/mmikk/MikkTSpace.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(mikktspace)
+add_library(flare-mikktspace STATIC
+        ${mikktspace_SOURCE_DIR}/mikktspace.c
+)
+
 include(cmake/FetchSlang.cmake)
 
 add_library(FlareExternal INTERFACE)
@@ -120,6 +131,7 @@ target_link_libraries(FlareExternal INTERFACE
         glm
         spdlog
         flare-spirv-cross
+        flare-mikktspace
         slang
         Vulkan::shaderc_combined
 )
@@ -128,6 +140,7 @@ target_include_directories(FlareExternal INTERFACE
         ${stb_SOURCE_DIR}
         ${cgltf_SOURCE_DIR}
         ${spirv-cross_SOURCE_DIR}
+        ${mikktspace_SOURCE_DIR}
 )
 target_compile_definitions(FlareExternal INTERFACE GLM_FORCE_DEPTH_ZERO_TO_ONE)
 
@@ -161,6 +174,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/RingBuffer.h
         src/Flare/FlareGraphics/FlareImgui.cpp
         src/Flare/FlareGraphics/FlareImgui.h
+        src/Flare/FlareGraphics/CalcTangent.cpp
+        src/Flare/FlareGraphics/CalcTangent.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal

@@ -8,8 +8,8 @@ layout (set = 4, binding = 0) uniform sampler globalSamplers[];
 
 layout (location = 0) in vec3 inFragPos;
 layout (location = 1) in vec2 inUV;
-layout (location = 2) in vec3 inNormal;
-layout (location = 3) flat in uint inDrawID;
+layout (location = 2) flat in uint inDrawID;
+layout (location = 3) in mat3 inTBN;
 
 layout (location = 0) out vec4 outColor;
 
@@ -35,7 +35,7 @@ struct Globals {
     uint textureBufferIndex;
     uint materialBufferIndex;
     uint meshDrawBufferIndex;
-    float pad;
+    uint tangentBufferIndex;
 
     Light light;
 };
@@ -90,6 +90,10 @@ void main() {
     vec4 fragColor = texture(sampler2D(globalTextures[nonuniformEXT(tex.textureIndex)],
     globalSamplers[nonuniformEXT(tex.samplerIndex)]), inUV);
 
+    TextureIndex normalTex = textureIndexBuffer[glob.textureBufferIndex].textureIndices[mat.normalTextureOffset];
+    vec3 normal = texture(sampler2D(globalTextures[nonuniformEXT(normalTex.textureIndex)],
+    globalSamplers[nonuniformEXT(normalTex.samplerIndex)]), inUV).rgb;
+
     if (fragColor.a < 0.01) {
         discard;
     }
@@ -100,11 +104,11 @@ void main() {
 
     vec3 albedo = fragColor.rgb;
 
-    vec3 N = normalize(inNormal);
+    vec3 N = normalize(inTBN * (normal * 2.0 - 1.0));
     vec3 L = normalize(lightPos - inFragPos);
     vec3 V = normalize(-inFragPos);
     vec3 H = normalize(L + V);
-    vec3 ambient = 0.1 * albedo;
+    vec3 ambient = 0.01 * albedo;
     float diff = max(dot(N, L), 0.0);
     vec3 diffuse = diff * albedo * lightColor * lightIntensity;
     float shininess = 32.0;
