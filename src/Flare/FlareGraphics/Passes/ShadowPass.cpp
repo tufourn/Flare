@@ -132,7 +132,7 @@ namespace Flare {
         vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pc);
 
         vkCmdDrawIndexedIndirect(cmd, gpu->getBuffer(indirectDrawBuffer)->buffer, 0, count,
-                                 sizeof(IndirectDrawCommand));
+                                 sizeof(IndirectDrawData));
 
         vkCmdEndRendering(cmd);
 

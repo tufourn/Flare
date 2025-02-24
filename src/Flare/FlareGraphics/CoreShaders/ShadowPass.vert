@@ -7,7 +7,7 @@
 struct ShadowUniform {
     mat4 lightSpaceMatrix;
 
-    uint drawDataBufferIndex;
+    uint indirectDrawDataBufferIndex;
     uint positionBufferIndex;
     uint transformBufferIndex;
     float pad;
@@ -17,7 +17,7 @@ layout (set = 0, binding = 0) uniform U { ShadowUniform shadowUniform; } shadowU
 
 void main() {
     ShadowUniform shadowUniform = shadowUniformAlias[pc.uniformOffset].shadowUniform;
-    DrawData dd = drawDataAlias[shadowUniform.drawDataBufferIndex].drawDatas[gl_DrawID];
+    IndirectDrawData dd = indirectDrawDataAlias[shadowUniform.indirectDrawDataBufferIndex].indirectDrawDatas[gl_DrawID];
 
     mat4 transform = transformAlias[shadowUniform.transformBufferIndex].transforms[dd.transformOffset];
     vec4 position = positionAlias[shadowUniform.positionBufferIndex].positions[gl_VertexIndex];

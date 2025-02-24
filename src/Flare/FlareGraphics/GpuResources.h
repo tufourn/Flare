@@ -231,8 +231,12 @@ namespace Flare {
         float intensity;
     };
 
-    struct IndirectDrawCommand {
+    struct IndirectDrawData {
         VkDrawIndexedIndirectCommand cmd;
+
+        uint32_t meshId;
+        uint32_t materialOffset;
+        uint32_t transformOffset;
     };
 
 }

@@ -58,12 +58,23 @@ layout(set = 1, binding = 0) readonly buffer MaterialBuffer {
     Material materials[];
 } materialAlias[];
 
-struct DrawData {
-    uint transformOffset;
+layout(set = 1, binding = 0) buffer indirectCountBuffer {
+    uint count;
+} indirectCountAlias[];
+
+struct IndirectDrawData {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    uint vertexOffset;
+    uint firstInstance;
+
+    uint meshId;
     uint materialOffset;
+    uint transformOffset;
 };
-layout(set = 1, binding = 0) readonly buffer DrawDataBuffer {
-    DrawData drawDatas[];
-} drawDataAlias[];
+layout(set = 1, binding = 0) buffer indirectDrawDataBuffer {
+    IndirectDrawData indirectDrawDatas[];
+} indirectDrawDataAlias[];
 
 #endif

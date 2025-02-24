@@ -33,7 +33,7 @@ struct Globals {
 
     uint textureBufferIndex;
     uint materialBufferIndex;
-    uint meshDrawBufferIndex;
+    uint indirectDrawDataBufferIndex;
     uint tangentBufferIndex;
 
     Light light;
@@ -81,7 +81,7 @@ float shadowCalculation(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, ui
 
 void main() {
     Globals glob = globalBuffer[pc.uniformOffset].globals;
-    DrawData dd = drawDataAlias[glob.meshDrawBufferIndex].drawDatas[inDrawID];
+    IndirectDrawData dd = indirectDrawDataAlias[glob.indirectDrawDataBufferIndex].indirectDrawDatas[inDrawID];
 
     vec3 lightPos = glob.light.position;
     vec3 lightColor = glob.light.color;
@@ -140,6 +140,7 @@ void main() {
 
     float shadow = shadowCalculation(inFragLightSpace, glob.shadowDepthTextureIndex, glob.shadowSamplerIndex);
     vec3 finalColor = (diffuse + specular) * shadow;
+    //    vec3 finalColor = (diffuse + specular);
 
     outColor = vec4(finalColor, 1.0);
 }

@@ -426,10 +426,9 @@ namespace Flare {
                 transforms.push_back(node->worldTransform);
                 meshDraw.materialOffset = meshPrim.materialOffset;
 
-                //todo: material
-
                 if (!map.contains(meshPrim.id)) {
                     meshDraw.indexCount = meshPrim.indices.size();
+                    meshDraw.id = meshPrim.id;
 
                     meshDraw.indexOffset = indices.size();
                     indices.insert(indices.end(), meshPrim.indices.begin(), meshPrim.indices.end());
@@ -442,6 +441,7 @@ namespace Flare {
 
                     map.insert({meshPrim.id, {meshDraw}});
                 } else { // reuse values from mesh primitive with same id //todo: skinned mesh with different offsets
+                    meshDraw.id = meshPrim.id;
                     meshDraw.indexCount = meshPrim.indices.size();
                     meshDraw.indexOffset = map.at(meshPrim.id).back().indexOffset;
                     meshDraw.vertexOffset = map.at(meshPrim.id).back().vertexOffset;

@@ -23,6 +23,7 @@ namespace Flare {
     };
 
     struct MeshDraw {
+        uint32_t id = 0;
         uint32_t indexCount = 0;
         uint32_t indexOffset = 0;
         uint32_t vertexOffset = 0;

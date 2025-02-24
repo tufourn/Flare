@@ -3,6 +3,7 @@
 #include "FlareApp/Camera.h"
 #include "FlareGraphics/GpuDevice.h"
 #include "FlareGraphics/Passes/ShadowPass.h"
+#include "FlareGraphics/Passes/FrustumCullPass.h"
 
 #include <glm/glm.hpp>
 
@@ -27,7 +28,7 @@ struct TriangleApp : Application {
 
         uint32_t textureBufferIndex;
         uint32_t materialBufferIndex;
-        uint32_t drawDataBufferIndex;
+        uint32_t indirectDrawDataBufferIndex;
         uint32_t tangentBufferIndex;
 
         Light light;
@@ -39,21 +40,7 @@ struct TriangleApp : Application {
 
     Globals globals;
 
-    struct ShadowUniform {
-        glm::mat4 lightSpaceMatrix;
-
-        uint32_t drawDataBufferIndex;
-        uint32_t positionBufferIndex;
-        uint32_t transformBufferIndex;
-        float pad;
-    };
-
     ShadowUniform shadowUniforms;
-
-    struct GpuDrawData {
-        uint32_t transformOffset;
-        uint32_t materialOffset;
-    };
 
     void init(const ApplicationConfig &appConfig) override {
         WindowConfig windowConfig{};
@@ -208,47 +195,36 @@ struct TriangleApp : Application {
                 }
         );
 
-        BufferCI meshDrawCI = {
-                .size = sizeof(GpuDrawData) * gltf.meshDraws.size(),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .name = "meshdraws"
-        };
-
-        gpuMeshDraws.reserve(gltf.meshDraws.size());
-        for (auto &meshDraw: gltf.meshDraws) {
-            gpuMeshDraws.emplace_back(GpuDrawData{
-                    .transformOffset = meshDraw.transformOffset,
-                    .materialOffset = meshDraw.materialOffset,
-            });
-        }
-
-        drawDataBufferHandle = gpu.createBuffer(meshDrawCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(drawDataBufferHandle),
-                        .data = (void *) gpuMeshDraws.data(),
-                }
-        );
-
-        indirectDraws.resize(gltf.meshDraws.size());
+        indirectDrawDatas.resize(gltf.meshDraws.size());
         BufferCI indirectDrawCI = {
-                .size = sizeof(IndirectDrawCommand) * gltf.meshDraws.size(),
+                .size = sizeof(IndirectDrawData) * gltf.meshDraws.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
                 .mapped = true,
                 .name = "indirectDraws",
         };
-        indirectDrawBufferHandle = gpu.createBuffer(indirectDrawCI);
+        indirectDrawDataBufferHandle = gpu.createBuffer(indirectDrawCI);
+
+        BufferCI indirectCountCI = {
+                .size = sizeof(uint32_t),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .mapped = true,
+                .name = "indirectCount",
+        };
+        indirectCountBufferHandle = gpu.createBuffer(indirectCountCI);
 
         shadowPass.init(&gpu);
+        frustumCullPass.init(&gpu);
 
         globals.positionBufferIndex = positionBufferHandle.index;
         globals.normalBufferIndex = normalBufferHandle.index;
         globals.uvBufferIndex = uvBufferHandle.index;
         globals.transformBufferIndex = transformBufferHandle.index;
+
         globals.textureBufferIndex = textureIndicesHandle.index;
         globals.materialBufferIndex = materialBufferHandle.index;
-        globals.drawDataBufferIndex = drawDataBufferHandle.index;
+        globals.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
         globals.tangentBufferIndex = tangentBufferHandle.index;
+
         globals.shadowDepthTextureIndex = shadowPass.depthTextureHandle.index;
         globals.shadowSamplerIndex = shadowPass.samplerHandle.index;
 
@@ -259,9 +235,11 @@ struct TriangleApp : Application {
                 .intensity = 1.f,
         };
 
-        shadowUniforms.drawDataBufferIndex = drawDataBufferHandle.index;
+        shadowUniforms.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
         shadowUniforms.positionBufferIndex = positionBufferHandle.index;
         shadowUniforms.transformBufferIndex = transformBufferHandle.index;
+
+        drawCount = gltf.meshDraws.size();
 
         glfwSetWindowUserPointer(window.glfwWindow, &camera);
         glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
@@ -324,17 +302,24 @@ struct TriangleApp : Application {
                 for (size_t i = 0; i < gltf.meshDraws.size(); i++) {
                     const MeshDraw &md = gltf.meshDraws[i];
 
-                    indirectDraws[i].cmd = {
-                            .indexCount = md.indexCount,
-                            .instanceCount = 1,
-                            .firstIndex = md.indexOffset,
-                            .vertexOffset = static_cast<int32_t>(md.vertexOffset),
-                            .firstInstance = 0,
+                    indirectDrawDatas[i] = {
+                            .cmd = {
+                                    .indexCount = md.indexCount,
+                                    .instanceCount = 1,
+                                    .firstIndex = md.indexOffset,
+                                    .vertexOffset = static_cast<int32_t>(md.vertexOffset),
+                                    .firstInstance = 0,
+                            },
+                            .meshId = md.id,
+                            .materialOffset = md.materialOffset,
+                            .transformOffset = md.transformOffset,
                     };
                 }
 
-                memcpy(gpu.getBuffer(indirectDrawBufferHandle)->allocationInfo.pMappedData, indirectDraws.data(),
-                       sizeof(IndirectDrawCommand) * indirectDraws.size());
+                memcpy(gpu.getBuffer(indirectDrawDataBufferHandle)->allocationInfo.pMappedData, indirectDrawDatas.data(),
+                       sizeof(IndirectDrawData) * indirectDrawDatas.size());
+                memcpy(gpu.getBuffer(indirectCountBufferHandle)->allocationInfo.pMappedData, &drawCount,
+                       sizeof(uint32_t));
 
                 gpu.newFrame();
                 imgui.newFrame();
@@ -347,7 +332,7 @@ struct TriangleApp : Application {
                 shadowPass.render(cmd,
                                   shadowUniformBuffer.buffer().index,
                                   indexBufferHandle,
-                                  indirectDrawBufferHandle, indirectDraws.size());
+                                  indirectDrawDataBufferHandle, indirectDrawDatas.size());
 
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
                                           VK_IMAGE_LAYOUT_UNDEFINED,
@@ -418,12 +403,18 @@ struct TriangleApp : Application {
                 vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
                                    &pc);
 
-                vkCmdDrawIndexedIndirect(cmd, gpu.getBuffer(indirectDrawBufferHandle)->buffer, 0, gltf.meshDraws.size(),
-                                         sizeof(IndirectDrawCommand));
+//                vkCmdDrawIndexedIndirect(cmd, gpu.getBuffer(indirectDrawBufferHandle)->buffer, 0, gltf.meshDraws.size(),
+//                                         sizeof(IndirectDrawCommand));
+                vkCmdDrawIndexedIndirectCount(cmd,
+                                              gpu.getBuffer(indirectDrawDataBufferHandle)->buffer, 0,
+                                              gpu.getBuffer(indirectCountBufferHandle)->buffer, 0,
+                                              gltf.meshDraws.size(),
+                                              sizeof(IndirectDrawData));
 
                 vkCmdEndRendering(cmd);
 
                 ImGui::Begin("Light");
+                ImGui::SliderInt("Draw count", reinterpret_cast<int *>(&drawCount), 0, gltf.meshDraws.size());
                 ImGui::SliderFloat3("Light position", reinterpret_cast<float *>(&globals.light.position), -50.f, 50.f);
                 ImGui::SliderFloat("Light intensity", reinterpret_cast<float *>(&globals.light.intensity), 0.f, 100.f);
                 if (ImGui::Button("Reload pipeline")) {
@@ -457,6 +448,7 @@ struct TriangleApp : Application {
         vkDeviceWaitIdle(gpu.device);
 
         shadowPass.shutdown();
+        frustumCullPass.shutdown();
 
         imgui.shutdown();
 
@@ -470,11 +462,11 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(indexBufferHandle);
         gpu.destroyBuffer(transformBufferHandle);
         gpu.destroyBuffer(uvBufferHandle);
-        gpu.destroyBuffer(drawDataBufferHandle);
         gpu.destroyBuffer(textureIndicesHandle);
         gpu.destroyBuffer(materialBufferHandle);
         gpu.destroyBuffer(normalBufferHandle);
-        gpu.destroyBuffer(indirectDrawBufferHandle);
+        gpu.destroyBuffer(indirectDrawDataBufferHandle);
+        gpu.destroyBuffer(indirectCountBufferHandle);
         gpu.destroyBuffer(tangentBufferHandle);
 
         asyncLoader.shutdown();
@@ -499,13 +491,13 @@ struct TriangleApp : Application {
     Handle<Buffer> transformBufferHandle;
     Handle<Buffer> uvBufferHandle;
     Handle<Buffer> tangentBufferHandle;
-    Handle<Buffer> drawDataBufferHandle;
     Handle<Buffer> textureIndicesHandle;
     Handle<Buffer> materialBufferHandle;
     Handle<Buffer> normalBufferHandle;
-    std::vector<IndirectDrawCommand> indirectDraws;
-    Handle<Buffer> indirectDrawBufferHandle;
-    std::vector<GpuDrawData> gpuMeshDraws;
+    std::vector<IndirectDrawData> indirectDrawDatas;
+    Handle<Buffer> indirectDrawDataBufferHandle;
+    uint32_t drawCount;
+    Handle<Buffer> indirectCountBufferHandle;
 
     Camera camera;
 
@@ -514,6 +506,7 @@ struct TriangleApp : Application {
     FlareImgui imgui;
 
     ShadowPass shadowPass;
+    FrustumCullPass frustumCullPass;
 };
 
 int main() {

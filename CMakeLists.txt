@@ -181,6 +181,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/CalcTangent.h
         src/Flare/FlareGraphics/Passes/ShadowPass.cpp
         src/Flare/FlareGraphics/Passes/ShadowPass.h
+        src/Flare/FlareGraphics/Passes/FrustumCullPass.cpp
+        src/Flare/FlareGraphics/Passes/FrustumCullPass.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal

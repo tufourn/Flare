@@ -23,7 +23,7 @@ struct Globals {
 
     uint textureBufferIndex;
     uint materialBufferIndex;
-    uint meshDrawBufferIndex;
+    uint indirectDrawDataBufferIndex;
     uint tangentBufferIndex;
 
     Light light;
@@ -51,7 +51,7 @@ layout (location = 6) out vec4 outFragLightSpace;
 void main() {
     Globals glob = globalBuffer[pc.uniformOffset].globals;
 
-    DrawData dd = drawDataAlias[glob.meshDrawBufferIndex].drawDatas[gl_DrawID];
+    IndirectDrawData dd = indirectDrawDataAlias[glob.indirectDrawDataBufferIndex].indirectDrawDatas[gl_DrawID];
 
     mat4 transform = transformAlias[glob.transformBufferIndex].transforms[dd.transformOffset];
 
