@@ -35,7 +35,14 @@ namespace Flare {
 
         void newFrame() {
             glfwPollEvents();
-            glfwGetWindowSize(glfwWindow, &width, &height);
+
+            int newWidth, newHeight;
+            glfwGetWindowSize(glfwWindow, &newWidth, &newHeight);
+            if (newWidth != width || newHeight != height) {
+                shouldResize = true;
+            }
+            width = newWidth;
+            height = newHeight;
         }
 
         bool shouldClose() const { return glfwWindowShouldClose(glfwWindow); }
@@ -45,6 +52,7 @@ namespace Flare {
         GLFWwindow *glfwWindow = nullptr;
         int width = 0;
         int height = 0;
+        bool shouldResize = false;
     };
 }
 

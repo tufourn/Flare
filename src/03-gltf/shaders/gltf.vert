@@ -1,10 +1,9 @@
 #version 460
 
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : enable
 
-layout (push_constant) uniform PushConstants {
-    uint globalIndex;
-} pc;
+#include "CoreShaders/BindlessCommon.glsl"
 
 struct Light {
     vec3 position;
@@ -15,6 +14,7 @@ struct Light {
 
 struct Globals {
     mat4 mvp;
+    mat4 lightSpaceMatrix;
 
     uint positionBufferIndex;
     uint normalBufferIndex;
@@ -27,62 +27,45 @@ struct Globals {
     uint tangentBufferIndex;
 
     Light light;
+
+    uint shadowDepthTextureIndex;
+    uint shadowSamplerIndex;
+    float pad[2];
 };
+
+const mat4 biasMat = mat4(
+0.5, 0.0, 0.0, 0.0,
+0.0, 0.5, 0.0, 0.0,
+0.0, 0.0, 1.0, 0.0,
+0.5, 0.5, 0.0, 1.0
+);
 
 layout (set = 0, binding = 0) uniform U { Globals globals; } globalBuffer[];
-
-struct GpuMeshDraw {
-    uint transformOffset;
-    uint materialOffset;
-};
-
-// aliasing ssbo
-layout (set = 1, binding = 0) readonly buffer MeshDraws {
-    GpuMeshDraw meshDraws[];
-} meshDrawBuffer[];
-
-layout (set = 1, binding = 0) readonly buffer UVs {
-    vec2 uvs[];
-} uvBuffer[];
-
-layout (set = 1, binding = 0) readonly buffer Normals {
-    vec4 normals[];
-} normalBuffer[];
-
-layout (set = 1, binding = 0) readonly buffer Transform {
-    mat4 transforms[];
-} transformBuffer[];
-
-layout (set = 1, binding = 0) readonly buffer Position {
-    vec4 positions[];
-} positionBuffer[];
-
-layout (set = 1, binding = 0) readonly buffer Tangent {
-    vec4 tangents[];
-} tangentBuffer[];
 
 layout (location = 0) out vec3 outFragPos;
 layout (location = 1) out vec2 outUV;
 layout (location = 2) out uint outDrawID;
 layout (location = 3) out mat3 outTBN;
+layout (location = 6) out vec4 outFragLightSpace;
 
 void main() {
-    Globals glob = globalBuffer[pc.globalIndex].globals;
+    Globals glob = globalBuffer[pc.uniformOffset].globals;
 
-    GpuMeshDraw md = meshDrawBuffer[glob.meshDrawBufferIndex].meshDraws[gl_DrawID];
+    DrawData dd = drawDataAlias[glob.meshDrawBufferIndex].drawDatas[gl_DrawID];
 
-    mat4 transform = transformBuffer[glob.transformBufferIndex].transforms[md.transformOffset];
+    mat4 transform = transformAlias[glob.transformBufferIndex].transforms[dd.transformOffset];
 
-    vec4 position = transform * positionBuffer[glob.positionBufferIndex].positions[gl_VertexIndex];
+    vec4 position = transform * positionAlias[glob.positionBufferIndex].positions[gl_VertexIndex];
     gl_Position = glob.mvp * position;
 
-    vec3 normal = normalize(mat3(transpose(inverse(transform))) * normalBuffer[glob.normalBufferIndex].normals[gl_VertexIndex].xyz);
-    vec4 tangent = normalize(transform * tangentBuffer[glob.tangentBufferIndex].tangents[gl_VertexIndex]);
+    vec3 normal = normalize(mat3(transpose(inverse(transform))) * normalAlias[glob.normalBufferIndex].normals[gl_VertexIndex].xyz);
+    vec4 tangent = normalize(transform * tangentAlias[glob.tangentBufferIndex].tangents[gl_VertexIndex]);
     vec3 bitangent = normalize(cross(normal, tangent.xyz) * tangent.w);
 
     outTBN = mat3(tangent.xyz, bitangent, normal);
 
     outFragPos = position.xyz;
-    outUV = uvBuffer[glob.uvBufferIndex].uvs[gl_VertexIndex];
+    outUV = uvAlias[glob.uvBufferIndex].uvs[gl_VertexIndex];
     outDrawID = gl_DrawID;
+    outFragLightSpace = biasMat * glob.lightSpaceMatrix * position;
 }

@@ -96,6 +96,10 @@ namespace Flare {
     struct RasterizationCI {
         VkCullModeFlags cullMode = VK_CULL_MODE_NONE;
         VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+        bool depthBiasEnable = false;
+        float depthBiasConstant = 0.f;
+        float depthBiasSlope = 0.f;
     };
 
     struct DepthStencilCI {
@@ -184,6 +188,8 @@ namespace Flare {
         VkSamplerAddressMode u = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         VkSamplerAddressMode v = VK_SAMPLER_ADDRESS_MODE_REPEAT;
         VkSamplerAddressMode w = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+        VkBorderColor borderColor = VK_BORDER_COLOR_MAX_ENUM;
     };
 
     struct Sampler {
@@ -192,11 +198,11 @@ namespace Flare {
 
     struct TextureCI {
         void* initialData = nullptr;
-        uint16_t width = 1;
-        uint16_t height = 1;
-        uint16_t depth = 1;
-        uint16_t mipCount = 1;
-        uint16_t layerCount = 1;
+        uint32_t width = 1;
+        uint32_t height = 1;
+        uint32_t depth = 1;
+        uint32_t mipCount = 1;
+        uint32_t layerCount = 1;
         VkFormat format = VK_FORMAT_UNDEFINED;
         VkImageType type = VK_IMAGE_TYPE_MAX_ENUM;
         VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
@@ -209,9 +215,9 @@ namespace Flare {
         VkFormat format = VK_FORMAT_UNDEFINED;
         VmaAllocation allocation = nullptr;
 
-        uint16_t width = 1;
-        uint16_t height = 1;
-        uint16_t depth = 1;
+        uint32_t width = 1;
+        uint32_t height = 1;
+        uint32_t depth = 1;
 
         Handle<Texture> handle;
         std::string name;
@@ -224,4 +230,9 @@ namespace Flare {
         glm::vec3 color;
         float intensity;
     };
+
+    struct IndirectDrawCommand {
+        VkDrawIndexedIndirectCommand cmd;
+    };
+
 }

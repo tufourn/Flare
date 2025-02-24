@@ -25,7 +25,7 @@ namespace Flare {
     static constexpr uint32_t SET_COUNT = 6;
 
     struct PushConstants {
-        uint32_t bindingsOffset;
+        uint32_t uniformOffset;
     };
 
     struct ResourcePoolCI {
@@ -97,6 +97,8 @@ namespace Flare {
         Buffer *getUniform(Handle<Buffer> handle);
 
         Texture *getTexture(Handle<Texture> handle);
+
+        Pipeline *getPipeline(Handle <Pipeline> handle);
 
         Handle<Texture> createTexture(const TextureCI &ci);
 

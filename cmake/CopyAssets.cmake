@@ -3,11 +3,12 @@ function(copy_assets TargetName)
 
     set(CopyCommands)
     foreach (DirToCopy IN LISTS ARGN)
+        get_filename_component(DirName ${DirToCopy} NAME)
         # copy from source to build
         list(APPEND CopyCommands
                 COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${TargetSourceDir}/${DirToCopy}
-                $<TARGET_FILE_DIR:${TargetName}>/${DirToCopy}
+                $<TARGET_FILE_DIR:${TargetName}>/${DirName}
         )
 
     endforeach ()

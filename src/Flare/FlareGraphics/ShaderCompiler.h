@@ -13,6 +13,15 @@ namespace fs = std::filesystem;
 namespace Flare {
     constexpr uint32_t SPIRV_MAGIC_NUMBER = 0x07230203;
 
+    struct ShaderIncluder : public shaderc::CompileOptions::IncluderInterface {
+        shaderc_include_result *GetInclude(const char *requested_source,
+                                           shaderc_include_type type,
+                                           const char *requesting_source,
+                                           size_t include_depth) override;
+
+        void ReleaseInclude(shaderc_include_result *data) override;
+    };
+
     struct ShaderCompiler {
         void init();
 
@@ -26,5 +35,6 @@ namespace Flare {
 
         Slang::ComPtr <slang::IGlobalSession> globalSession;
         shaderc::Compiler shadercCompiler;
+        shaderc::CompileOptions shadercOptions;
     };
 }

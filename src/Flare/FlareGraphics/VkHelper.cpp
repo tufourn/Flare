@@ -13,7 +13,10 @@ namespace VkHelper {
                 .oldLayout = initialLayout,
                 .newLayout = finalLayout,
                 .image = image,
-                .subresourceRange = subresourceRange(finalLayout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL)
+                .subresourceRange = subresourceRange(
+                        initialLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+                        finalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                )
         };
 
         VkDependencyInfo dependencyInfo = {

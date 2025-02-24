@@ -636,8 +636,8 @@ namespace Flare {
         vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
 
         TextureCI depthTextureCI = {
-                .width = static_cast<uint16_t>(swapchainExtent.width),
-                .height = static_cast<uint16_t>(swapchainExtent.height),
+                .width = swapchainExtent.width,
+                .height = swapchainExtent.height,
                 .depth = 1,
                 .format = VK_FORMAT_D32_SFLOAT,
                 .type = VK_IMAGE_TYPE_2D,
@@ -805,10 +805,10 @@ namespace Flare {
                 .polygonMode = VK_POLYGON_MODE_FILL,
                 .cullMode = ci.rasterization.cullMode,
                 .frontFace = ci.rasterization.frontFace,
-                .depthBiasEnable = VK_FALSE,
-                .depthBiasConstantFactor = 0.f,
+                .depthBiasEnable = ci.rasterization.depthBiasEnable,
+                .depthBiasConstantFactor = ci.rasterization.depthBiasConstant,
                 .depthBiasClamp = 0.f,
-                .depthBiasSlopeFactor = 0.f,
+                .depthBiasSlopeFactor = ci.rasterization.depthBiasSlope,
                 .lineWidth = 1.f,
         };
 
@@ -1413,7 +1413,7 @@ namespace Flare {
 //                .compareOp;
 //                .minLod;
 //                .maxLod;
-//                .borderColor;
+                .borderColor = ci.borderColor,
 //                .unnormalizedCoordinates;
         };
 
@@ -1611,6 +1611,10 @@ namespace Flare {
 
     Texture *GpuDevice::getTexture(Handle<Texture> handle) {
         return textures.get(handle);
+    }
+
+    Pipeline *GpuDevice::getPipeline(Handle<Pipeline> handle) {
+        return pipelines.get(handle);
     }
 
     void GpuDevice::createDefaultTextures() {

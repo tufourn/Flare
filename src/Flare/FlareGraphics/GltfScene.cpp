@@ -54,8 +54,8 @@ namespace Flare {
                                     &width, &height, &channelCount, STBI_rgb_alpha);
 
                             TextureCI textureCI = {
-                                    .width = static_cast<uint16_t>(width),
-                                    .height = static_cast<uint16_t>(height),
+                                    .width = static_cast<uint32_t>(width),
+                                    .height = static_cast<uint32_t>(height),
                                     .depth = 1,
                                     .format = VK_FORMAT_R8G8B8A8_UNORM,
                                     .type = VK_IMAGE_TYPE_2D,
@@ -82,8 +82,8 @@ namespace Flare {
                     stbi_info(imageFile.string().c_str(), &width, &height, &channelCount);
 
                     TextureCI textureCI = {
-                            .width = static_cast<uint16_t>(width),
-                            .height = static_cast<uint16_t>(height),
+                            .width = static_cast<uint32_t>(width),
+                            .height = static_cast<uint32_t>(height),
                             .depth = 1,
                             .format = VK_FORMAT_R8G8B8A8_UNORM,
                             .type = VK_IMAGE_TYPE_2D,
@@ -110,8 +110,8 @@ namespace Flare {
                         &width, &height, &channelCount, STBI_rgb_alpha);
 
                 TextureCI textureCI = {
-                        .width = static_cast<uint16_t>(width),
-                        .height = static_cast<uint16_t>(height),
+                        .width = static_cast<uint32_t>(width),
+                        .height = static_cast<uint32_t>(height),
                         .depth = 1,
                         .format = VK_FORMAT_R8G8B8A8_UNORM,
                         .type = VK_IMAGE_TYPE_2D,

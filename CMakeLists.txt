@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
 
 include(FetchContent)
+include(cmake/CopyAssets.cmake)
+include(cmake/SyncShaders.cmake)
+
 set(FETCHCONTENT_QUIET FALSE)
 
 FetchContent_Declare(
@@ -176,6 +179,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/FlareImgui.h
         src/Flare/FlareGraphics/CalcTangent.cpp
         src/Flare/FlareGraphics/CalcTangent.h
+        src/Flare/FlareGraphics/Passes/ShadowPass.cpp
+        src/Flare/FlareGraphics/Passes/ShadowPass.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal
@@ -185,9 +190,6 @@ target_compile_definitions(FlareGraphics PRIVATE
         $<$<BOOL:${ENABLE_VULKAN_VALIDATION}>:ENABLE_VULKAN_VALIDATION>
 )
 
-include(cmake/CopyAssets.cmake)
-include(cmake/SyncShaders.cmake)
+sync_shaders(FlareGraphics)
 
-add_subdirectory(src/01-triangle)
-add_subdirectory(src/02-textured-triangle)
 add_subdirectory(src/03-gltf)

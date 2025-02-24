@@ -1,23 +1,19 @@
 #version 460
 
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "CoreShaders/BindlessCommon.glsl"
 
 #define PI 3.14159265
-
-layout (set = 2, binding = 0) uniform texture2D globalTextures[];
-layout (set = 3, binding = 0) uniform writeonly image2D globalStorageImages[];
-layout (set = 4, binding = 0) uniform sampler globalSamplers[];
 
 layout (location = 0) in vec3 inFragPos;
 layout (location = 1) in vec2 inUV;
 layout (location = 2) flat in uint inDrawID;
 layout (location = 3) in mat3 inTBN;
+layout (location = 6) in vec4 inFragLightSpace;
 
 layout (location = 0) out vec4 outColor;
-
-layout (push_constant) uniform PushConstants {
-    uint globalIndex;
-} pc;
 
 struct Light {
     vec3 position;
@@ -28,6 +24,7 @@ struct Light {
 
 struct Globals {
     mat4 mvp;
+    mat4 lightSpaceMatrix;
 
     uint positionBufferIndex;
     uint normalBufferIndex;
@@ -40,46 +37,13 @@ struct Globals {
     uint tangentBufferIndex;
 
     Light light;
-};
 
-struct Material {
-    vec4 albedoFactor;
-
-    uint albedoTextureOffset;
-    uint metallicRoughnessTextureOffset;
-    uint normalTextureOffset;
-    uint occlusionTextureOffset;
-
-    uint emissiveTextureOffset;
-    float metallicFactor;
-    float roughnessFactor;
-    float pad;
+    uint shadowDepthTextureIndex;
+    uint shadowSamplerIndex;
+    float pad[2];
 };
 
 layout (set = 0, binding = 0) uniform U { Globals globals; } globalBuffer[];
-
-struct GpuMeshDraw {
-    uint transformOffset;
-    uint materialOffset;
-};
-
-struct TextureIndex {
-    uint textureIndex;
-    uint samplerIndex;
-};
-
-// aliasing ssbo
-layout (set = 1, binding = 0) readonly buffer MeshDraws {
-    GpuMeshDraw meshDraws[];
-} meshDrawBuffer[];
-
-layout (set = 1, binding = 0) readonly buffer T {
-    TextureIndex textureIndices[];
-} textureIndexBuffer[];
-
-layout (set = 1, binding = 0) readonly buffer M {
-    Material materials[];
-} materialBuffer[];
 
 float D_GGX(float NoH, float a) {
     float a2 = a * a;
@@ -102,25 +66,42 @@ float Fd_Lambert() {
     return 1.0 / PI;
 }
 
+float shadowCalculation(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
+    float shadow = 1.0;
+    if (fragPosLightSpace.z > -1.0 && fragPosLightSpace.z < 1.0) {
+        float dist = texture(sampler2D(globalTextures[nonuniformEXT(shadowDepthTextureIndex)],
+        globalSamplers[shadowSamplerIndex]), fragPosLightSpace.xy).r;
+
+        if (fragPosLightSpace.w > 0.0 && dist < fragPosLightSpace.z) {
+            shadow = 0.1;
+        }
+    }
+    return shadow;
+}
+
 void main() {
-    Globals glob = globalBuffer[pc.globalIndex].globals;
-    GpuMeshDraw md = meshDrawBuffer[glob.meshDrawBufferIndex].meshDraws[inDrawID];
+    Globals glob = globalBuffer[pc.uniformOffset].globals;
+    DrawData dd = drawDataAlias[glob.meshDrawBufferIndex].drawDatas[inDrawID];
 
     vec3 lightPos = glob.light.position;
     vec3 lightColor = glob.light.color;
     float lightIntensity = glob.light.intensity;
 
-    Material mat = materialBuffer[glob.materialBufferIndex].materials[md.materialOffset];
+    Material mat = materialAlias[glob.materialBufferIndex].materials[dd.materialOffset];
 
-    TextureIndex albedoIndex = textureIndexBuffer[glob.textureBufferIndex].textureIndices[mat.albedoTextureOffset];
+    TextureIndex albedoIndex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.albedoTextureOffset];
     vec4 albedo = texture(sampler2D(globalTextures[nonuniformEXT(albedoIndex.textureIndex)],
     globalSamplers[nonuniformEXT(albedoIndex.samplerIndex)]), inUV);
 
-    TextureIndex normalTex = textureIndexBuffer[glob.textureBufferIndex].textureIndices[mat.normalTextureOffset];
+    if (albedo.a < 0.01) {
+        discard;
+    }
+
+    TextureIndex normalTex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.normalTextureOffset];
     vec3 normal = texture(sampler2D(globalTextures[nonuniformEXT(normalTex.textureIndex)],
     globalSamplers[nonuniformEXT(normalTex.samplerIndex)]), inUV).rgb;
 
-    TextureIndex metallicRoughnessTex = textureIndexBuffer[glob.textureBufferIndex].textureIndices[mat.metallicRoughnessTextureOffset];
+    TextureIndex metallicRoughnessTex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.metallicRoughnessTextureOffset];
     vec4 metallicRoughness = texture(sampler2D(globalTextures[nonuniformEXT(metallicRoughnessTex.textureIndex)],
     globalSamplers[nonuniformEXT(metallicRoughnessTex.samplerIndex)]), inUV);
 
@@ -154,10 +135,11 @@ void main() {
     vec3 Fr = (D * specularV) * F;
     vec3 Fd = diffuseColor * Fd_Lambert();
 
-    vec3 diffuse = Fd * lightColor * lightIntensity * NoL;  // Diffuse lighting
-    vec3 specular = Fr * lightColor * lightIntensity * NoL;  // Specular lighting
+    vec3 diffuse = Fd * (1 - F) * lightColor * lightIntensity * NoL;// Diffuse lighting
+    vec3 specular = Fr * lightColor * lightIntensity * NoL;// Specular lighting
 
-    vec3 finalColor = diffuse + specular;
+    float shadow = shadowCalculation(inFragLightSpace, glob.shadowDepthTextureIndex, glob.shadowSamplerIndex);
+    vec3 finalColor = (diffuse + specular) * shadow;
 
     outColor = vec4(finalColor, 1.0);
 }

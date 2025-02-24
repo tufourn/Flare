@@ -8,6 +8,8 @@
 namespace Flare {
     void ShaderCompiler::init() {
         createGlobalSession(globalSession.writeRef());
+
+        shadercOptions.SetIncluder(std::make_unique<ShaderIncluder>());
     }
 
     void ShaderCompiler::shutdown() {
@@ -151,8 +153,6 @@ namespace Flare {
         }
 
         // otherwise compile
-        shaderc::CompileOptions options;
-
         std::ifstream shaderFile(path);
         if (!shaderFile.is_open()) {
             spdlog::error("Failed to open {}", path.string());
@@ -178,7 +178,7 @@ namespace Flare {
         }
 
         shaderc::SpvCompilationResult result = shadercCompiler.CompileGlslToSpv(shaderCode, shaderKind,
-                                                                                path.string().c_str(), options);
+                                                                                path.string().c_str(), shadercOptions);
 
         if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
             spdlog::error("Shader compilation failed: {}", result.GetErrorMessage());
@@ -201,5 +201,40 @@ namespace Flare {
         }
 
         return spirv;
+    }
+
+    shaderc_include_result *ShaderIncluder::GetInclude(const char *requested_source, shaderc_include_type type,
+                                                       const char *requesting_source, size_t include_depth) {
+        std::ifstream includeFile(requested_source);
+        if (!includeFile.is_open()) {
+            spdlog::error("Failed to include {}", requested_source);
+            return nullptr;
+        }
+
+        std::string name = std::string(requested_source);
+
+        std::stringstream buf;
+        buf << includeFile.rdbuf();
+        std::string shaderCode = buf.str();
+
+        includeFile.close();
+
+        auto container = new std::array<std::string, 2>;
+        (*container)[0] = name;
+        (*container)[1] = shaderCode;
+
+        auto data = new shaderc_include_result;
+        data->user_data = container;
+        data->source_name = (*container)[0].data();
+        data->source_name_length = (*container)[0].size();
+        data->content = (*container)[1].data();
+        data->content_length = (*container)[1].size();
+
+        return data;
+    }
+
+    void ShaderIncluder::ReleaseInclude(shaderc_include_result *data) {
+        delete static_cast<std::array<std::string, 2> *>(data->user_data);
+        delete data;
     }
 }
