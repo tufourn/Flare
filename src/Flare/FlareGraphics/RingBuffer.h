@@ -1,3 +1,5 @@
+#pragma once
+
 #include "GpuResources.h"
 
 namespace Flare {

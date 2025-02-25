@@ -58,10 +58,6 @@ layout(set = 1, binding = 0) readonly buffer MaterialBuffer {
     Material materials[];
 } materialAlias[];
 
-layout(set = 1, binding = 0) buffer indirectCountBuffer {
-    uint count;
-} indirectCountAlias[];
-
 struct IndirectDrawData {
     uint indexCount;
     uint instanceCount;
@@ -73,8 +69,16 @@ struct IndirectDrawData {
     uint materialOffset;
     uint transformOffset;
 };
-layout(set = 1, binding = 0) buffer indirectDrawDataBuffer {
+
+layout(set = 1, binding = 0) readonly buffer IndirectDrawDataBuffer {
     IndirectDrawData indirectDrawDatas[];
 } indirectDrawDataAlias[];
+
+struct Bounds {
+    vec3 origin;
+    float radius;
+    vec3 extents;
+    float pad;
+};
 
 #endif

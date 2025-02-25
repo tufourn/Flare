@@ -167,6 +167,7 @@ namespace Flare {
         size_t size = 0;
         VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
         bool mapped = false;
+        bool readback = false;
         std::string name;
     };
 
@@ -239,4 +240,10 @@ namespace Flare {
         uint32_t transformOffset;
     };
 
+    struct Bounds {
+        glm::vec3 origin;
+        float radius;
+        glm::vec3 extents;
+        float pad;
+    };
 }

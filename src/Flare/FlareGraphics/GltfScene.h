@@ -29,6 +29,8 @@ namespace Flare {
         uint32_t vertexOffset = 0;
         uint32_t transformOffset = 0;
         uint32_t materialOffset = 0;
+
+        Bounds bounds;
     };
 
     struct SkinData { // todo
@@ -57,6 +59,7 @@ namespace Flare {
         std::vector<glm::vec2> uvs;
         std::vector<glm::vec4> tangents;
         uint32_t materialOffset;
+        Bounds bounds;
     };
 
     struct GltfMesh {

@@ -98,7 +98,7 @@ namespace Flare {
 
         Texture *getTexture(Handle<Texture> handle);
 
-        Pipeline *getPipeline(Handle <Pipeline> handle);
+        Pipeline *getPipeline(Handle<Pipeline> handle);
 
         Handle<Texture> createTexture(const TextureCI &ci);
 
@@ -175,5 +175,18 @@ namespace Flare {
         ResourcePool<Buffer> uniforms;
         ResourcePool<Texture> textures;
         ResourcePool<Sampler> samplers;
+
+        template<typename T>
+        void setVkObjectName(T handle, VkObjectType type, const std::string &name) const {
+#ifdef ENABLE_VULKAN_VALIDATION
+            const VkDebugUtilsObjectNameInfoEXT objectNameInfo = {
+                    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+                    .objectType = type,
+                    .objectHandle = reinterpret_cast<uint64_t>(handle),
+                    .pObjectName = name.c_str(),
+            };
+            vkSetDebugUtilsObjectNameEXT(device, &objectNameInfo);
+#endif
+        }
     };
 }

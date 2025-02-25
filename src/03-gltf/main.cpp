@@ -10,7 +10,6 @@
 #include "FlareGraphics/VkHelper.h"
 #include "FlareGraphics/AsyncLoader.h"
 #include "FlareGraphics/GltfScene.h"
-#include "FlareGraphics/RingBuffer.h"
 #include "FlareGraphics/FlareImgui.h"
 #include "imgui.h"
 
@@ -40,8 +39,6 @@ struct TriangleApp : Application {
 
     Globals globals;
 
-    ShadowUniform shadowUniforms;
-
     void init(const ApplicationConfig &appConfig) override {
         WindowConfig windowConfig{};
         windowConfig
@@ -62,7 +59,6 @@ struct TriangleApp : Application {
         pipelineCI.shaderStages.emplace_back(ShaderStage{"shaders/gltf.frag", VK_SHADER_STAGE_FRAGMENT_BIT});
         pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
         pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
-        pipelineCI.rasterization.cullMode = VK_CULL_MODE_BACK_BIT;
         pipelineCI.depthStencil = {
                 .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
                 .depthTestEnable = true,
@@ -83,13 +79,6 @@ struct TriangleApp : Application {
                 .name = "globals",
         };
         globalsRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, globalsBufferCI, RingBuffer::Type::eUniform);
-
-        BufferCI shadowUniformBufferCI = {
-                .size = sizeof(ShadowUniform),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .name = "shadowUniforms",
-        };
-        shadowUniformBuffer.init(&gpu, FRAMES_IN_FLIGHT, shadowUniformBufferCI, RingBuffer::Type::eUniform);
 
         BufferCI positionsCI = {
                 .size = sizeof(glm::vec4) * gltf.positions.size(),
@@ -204,13 +193,29 @@ struct TriangleApp : Application {
         };
         indirectDrawDataBufferHandle = gpu.createBuffer(indirectDrawCI);
 
+        BufferCI culledIndirectDrawCI = {
+                .size = sizeof(IndirectDrawData) * indirectDrawDatas.size(),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .name = "culledIndirectDraws",
+        };
+        culledIndirectDrawDataBufferHandle = gpu.createBuffer(culledIndirectDrawCI);
+
         BufferCI indirectCountCI = {
                 .size = sizeof(uint32_t),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                .mapped = true,
+                .readback = true,
                 .name = "indirectCount",
         };
-        indirectCountBufferHandle = gpu.createBuffer(indirectCountCI);
+        countBufferHandle = gpu.createBuffer(indirectCountCI);
+
+        bounds.resize(gltf.meshDraws.size());
+        BufferCI boundCI = {
+                .size = sizeof(Bounds) * gltf.meshDraws.size(),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                .mapped = true,
+                .name = "bounds",
+        };
+        boundsBufferHandle = gpu.createBuffer(boundCI);
 
         shadowPass.init(&gpu);
         frustumCullPass.init(&gpu);
@@ -222,24 +227,29 @@ struct TriangleApp : Application {
 
         globals.textureBufferIndex = textureIndicesHandle.index;
         globals.materialBufferIndex = materialBufferHandle.index;
-        globals.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
         globals.tangentBufferIndex = tangentBufferHandle.index;
 
         globals.shadowDepthTextureIndex = shadowPass.depthTextureHandle.index;
         globals.shadowSamplerIndex = shadowPass.samplerHandle.index;
 
         globals.light = {
-                .position = {1.f, 20.f, 2.f},
+                .position = {-4.f, 12.f, 2.f},
                 .radius = 1.f,
                 .color = {1.f, 1.f, 1.f},
                 .intensity = 1.f,
         };
 
-        shadowUniforms.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
-        shadowUniforms.positionBufferIndex = positionBufferHandle.index;
-        shadowUniforms.transformBufferIndex = transformBufferHandle.index;
+        // shadow uniforms
+        shadowPass.uniforms.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
+        shadowPass.uniforms.positionBufferIndex = positionBufferHandle.index;
+        shadowPass.uniforms.transformBufferIndex = transformBufferHandle.index;
 
-        drawCount = gltf.meshDraws.size();
+        // frustum cull uniforms
+        frustumCullPass.uniforms.transformBufferIndex = transformBufferHandle.index;
+        frustumCullPass.uniforms.inputIndirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
+        frustumCullPass.uniforms.outputIndirectDrawDataBufferIndex = culledIndirectDrawDataBufferHandle.index;
+        frustumCullPass.uniforms.boundsBufferIndex = boundsBufferHandle.index;
+        frustumCullPass.uniforms.countBufferIndex = countBufferHandle.index;
 
         glfwSetWindowUserPointer(window.glfwWindow, &camera);
         glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
@@ -261,28 +271,26 @@ struct TriangleApp : Application {
 
             if (!window.isMinimized()) {
                 camera.update();
+                camera.setAspectRatio((float) window.width / window.height);
 
                 float nearPlane = 1.f;
                 float farPlane = 100.f;
                 glm::mat4 lightView = glm::lookAt(globals.light.position, glm::vec3(0.f, 0.f, 0.f),
                                                   glm::vec3(0.f, 1.f, 0.f));
-                glm::mat4 lightProjection = glm::ortho(-10.f, 10.f, -10.f, 10.f, nearPlane, farPlane);
+                glm::mat4 lightProjection = glm::ortho(-20.f, 20.f, -20.f, 20.f, nearPlane, farPlane);
                 lightProjection[1][1] *= -1;
-                shadowUniforms.lightSpaceMatrix = lightProjection * lightView;
-                asyncLoader.uploadRequests.emplace_back(
-                        UploadRequest{
-                                .dstBuffer = gpu.getUniform(shadowUniformBuffer.buffer()),
-                                .data = (void *) &shadowUniforms,
-                        }
-                );
+                glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 
                 glm::mat4 view = camera.getViewMatrix();
-                glm::mat4 projection = glm::perspectiveZO(glm::radians(45.f),
-                                                          static_cast<float>(window.width) / window.height, 0.1f,
-                                                          100.f);
-                projection[1][1] *= -1;
+                glm::mat4 projection = camera.getProjectionMatrix();
                 globals.mvp = projection * view;
-                globals.lightSpaceMatrix = shadowUniforms.lightSpaceMatrix;
+                globals.lightSpaceMatrix = lightSpaceMatrix;
+
+                if (shouldFrustumCull) {
+                    globals.indirectDrawDataBufferIndex = culledIndirectDrawDataBufferHandle.index;
+                } else {
+                    globals.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
+                }
 
                 asyncLoader.uploadRequests.emplace_back(
                         UploadRequest{
@@ -290,6 +298,17 @@ struct TriangleApp : Application {
                                 .data = (void *) &globals,
                         }
                 );
+
+                // shadows
+                shadowPass.uniforms.lightSpaceMatrix = lightSpaceMatrix;
+                shadowPass.updateUniforms(&asyncLoader);
+
+                // frustum cull
+                if (!fixedFrustum) {
+                    frustumCullPass.uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(projection * view);
+                }
+                frustumCullPass.uniforms.drawCount = indirectDrawDatas.size();
+                frustumCullPass.updateUniforms(&asyncLoader);
 
                 while (!asyncLoader.uploadRequests.empty()) { //todo: proper async transfer
                     asyncLoader.update();
@@ -314,12 +333,15 @@ struct TriangleApp : Application {
                             .materialOffset = md.materialOffset,
                             .transformOffset = md.transformOffset,
                     };
+
+                    bounds[i] = md.bounds;
                 }
 
-                memcpy(gpu.getBuffer(indirectDrawDataBufferHandle)->allocationInfo.pMappedData, indirectDrawDatas.data(),
+                memcpy(gpu.getBuffer(indirectDrawDataBufferHandle)->allocationInfo.pMappedData,
+                       indirectDrawDatas.data(),
                        sizeof(IndirectDrawData) * indirectDrawDatas.size());
-                memcpy(gpu.getBuffer(indirectCountBufferHandle)->allocationInfo.pMappedData, &drawCount,
-                       sizeof(uint32_t));
+                memcpy(gpu.getBuffer(boundsBufferHandle)->allocationInfo.pMappedData, bounds.data(),
+                       sizeof(Bounds) * bounds.size());
 
                 gpu.newFrame();
                 imgui.newFrame();
@@ -330,9 +352,14 @@ struct TriangleApp : Application {
                 asyncLoader.signalBuffers(cmd);
 
                 shadowPass.render(cmd,
-                                  shadowUniformBuffer.buffer().index,
                                   indexBufferHandle,
                                   indirectDrawDataBufferHandle, indirectDrawDatas.size());
+
+                frustumCullPass.cull(cmd);
+                //todo: implement compute queue, currently using the main queue here
+                frustumCullPass.addBarriers(cmd, gpu.mainFamily, gpu.mainFamily,
+                                            culledIndirectDrawDataBufferHandle,
+                                            countBufferHandle);
 
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
                                           VK_IMAGE_LAYOUT_UNDEFINED,
@@ -403,19 +430,33 @@ struct TriangleApp : Application {
                 vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
                                    &pc);
 
-//                vkCmdDrawIndexedIndirect(cmd, gpu.getBuffer(indirectDrawBufferHandle)->buffer, 0, gltf.meshDraws.size(),
-//                                         sizeof(IndirectDrawCommand));
-                vkCmdDrawIndexedIndirectCount(cmd,
-                                              gpu.getBuffer(indirectDrawDataBufferHandle)->buffer, 0,
-                                              gpu.getBuffer(indirectCountBufferHandle)->buffer, 0,
-                                              gltf.meshDraws.size(),
-                                              sizeof(IndirectDrawData));
+                if (shouldFrustumCull) {
+                    vkCmdDrawIndexedIndirectCount(cmd,
+                                                  gpu.getBuffer(culledIndirectDrawDataBufferHandle)->buffer, 0,
+                                                  gpu.getBuffer(countBufferHandle)->buffer, 0,
+                                                  gltf.meshDraws.size(),
+                                                  sizeof(IndirectDrawData));
+
+                } else {
+                    vkCmdDrawIndexedIndirect(cmd, gpu.getBuffer(indirectDrawDataBufferHandle)->buffer, 0,
+                                             gltf.meshDraws.size(),
+                                             sizeof(IndirectDrawData));
+                }
 
                 vkCmdEndRendering(cmd);
 
+                uint32_t drawCount = *reinterpret_cast<uint32_t *>(gpu.getBuffer(
+                        countBufferHandle)->allocationInfo.pMappedData);
                 ImGui::Begin("Light");
-                ImGui::SliderInt("Draw count", reinterpret_cast<int *>(&drawCount), 0, gltf.meshDraws.size());
-                ImGui::SliderFloat3("Light position", reinterpret_cast<float *>(&globals.light.position), -50.f, 50.f);
+                if (shouldFrustumCull) {
+                    ImGui::Text("Draw count: %i (culled %zu)", drawCount, indirectDrawDatas.size() - drawCount);
+                } else {
+                    ImGui::Text("Draw count: %zu", indirectDrawDatas.size());
+                }
+                ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
+                ImGui::Checkbox("Fixed frustum", &fixedFrustum);
+                ImGui::SliderFloat3("Light position",
+                                    reinterpret_cast<float *>(&globals.light.position), -50.f, 50.f);
                 ImGui::SliderFloat("Light intensity", reinterpret_cast<float *>(&globals.light.intensity), 0.f, 100.f);
                 if (ImGui::Button("Reload pipeline")) {
                     shouldReloadPipeline = true;
@@ -432,12 +473,12 @@ struct TriangleApp : Application {
                 vkEndCommandBuffer(cmd);
 
                 globalsRingBuffer.moveToNextBuffer();
-                shadowUniformBuffer.moveToNextBuffer();
 
                 gpu.present();
 
                 if (shouldReloadPipeline) {
                     gpu.recreatePipeline(pipelineHandle, pipelineCI);
+                    gpu.recreatePipeline(frustumCullPass.pipelineHandle, frustumCullPass.pipelineCI);
                     shouldReloadPipeline = false;
                 }
             }
@@ -455,7 +496,6 @@ struct TriangleApp : Application {
         gltf.shutdown();
 
         globalsRingBuffer.shutdown();
-        shadowUniformBuffer.shutdown();
 
         gpu.destroyPipeline(pipelineHandle);
         gpu.destroyBuffer(positionBufferHandle);
@@ -466,8 +506,10 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(materialBufferHandle);
         gpu.destroyBuffer(normalBufferHandle);
         gpu.destroyBuffer(indirectDrawDataBufferHandle);
-        gpu.destroyBuffer(indirectCountBufferHandle);
+        gpu.destroyBuffer(culledIndirectDrawDataBufferHandle);
+        gpu.destroyBuffer(countBufferHandle);
         gpu.destroyBuffer(tangentBufferHandle);
+        gpu.destroyBuffer(boundsBufferHandle);
 
         asyncLoader.shutdown();
         gpu.shutdown();
@@ -479,12 +521,13 @@ struct TriangleApp : Application {
     Flare::AsyncLoader asyncLoader;
 
     bool shouldReloadPipeline = false;
+    bool shouldFrustumCull = true;
+    bool fixedFrustum = false;
 
     PipelineCI pipelineCI;
     Handle<Pipeline> pipelineHandle;
 
     RingBuffer globalsRingBuffer;
-    RingBuffer shadowUniformBuffer;
 
     Handle<Buffer> positionBufferHandle;
     Handle<Buffer> indexBufferHandle;
@@ -494,10 +537,14 @@ struct TriangleApp : Application {
     Handle<Buffer> textureIndicesHandle;
     Handle<Buffer> materialBufferHandle;
     Handle<Buffer> normalBufferHandle;
+
     std::vector<IndirectDrawData> indirectDrawDatas;
     Handle<Buffer> indirectDrawDataBufferHandle;
-    uint32_t drawCount;
-    Handle<Buffer> indirectCountBufferHandle;
+    Handle<Buffer> culledIndirectDrawDataBufferHandle;
+    Handle<Buffer> countBufferHandle;
+
+    std::vector<Bounds> bounds;
+    Handle<Buffer> boundsBufferHandle;
 
     Camera camera;
 

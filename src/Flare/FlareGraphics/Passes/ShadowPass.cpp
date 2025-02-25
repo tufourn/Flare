@@ -2,6 +2,7 @@
 
 #include "../GpuDevice.h"
 #include "../VkHelper.h"
+#include "../AsyncLoader.h"
 
 namespace Flare {
     void ShadowPass::init(GpuDevice *gpuDevice) {
@@ -54,6 +55,13 @@ namespace Flare {
                 }
         };
         pipelineHandle = gpu->createPipeline(pipelineCI);
+
+        BufferCI shadowUniformBufferCI = {
+                .size = sizeof(ShadowUniform),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .name = "shadowUniforms",
+        };
+        shadowUniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, shadowUniformBufferCI, RingBuffer::Type::eUniform);
     }
 
     void ShadowPass::shutdown() {
@@ -66,17 +74,17 @@ namespace Flare {
         if (pipelineHandle.isValid()) {
             gpu->destroyPipeline(pipelineHandle);
         }
+        shadowUniformRingBuffer.shutdown();
     }
 
     void ShadowPass::render(VkCommandBuffer cmd,
-                            uint32_t bufferOffset,
                             Handle<Buffer> indexBuffer,
                             Handle<Buffer> indirectDrawBuffer, uint32_t count) {
         Texture *texture = gpu->getTexture(depthTextureHandle);
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
         PushConstants pc{
-                .uniformOffset = bufferOffset,
+                .uniformOffset = shadowUniformRingBuffer.buffer().index,
         };
 
         VkHelper::transitionImage(cmd, texture->image,
@@ -139,5 +147,16 @@ namespace Flare {
         VkHelper::transitionImage(cmd, texture->image,
                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
+    }
+
+    void ShadowPass::updateUniforms(AsyncLoader *asyncLoader) {
+        shadowUniformRingBuffer.moveToNextBuffer();
+
+        asyncLoader->uploadRequests.emplace_back(
+                UploadRequest{
+                        .dstBuffer = gpu->getUniform(shadowUniformRingBuffer.buffer()),
+                        .data = (void *) &uniforms,
+                }
+        );
     }
 }

@@ -2,9 +2,12 @@
 #include "AsyncLoader.h"
 #include "GpuDevice.h"
 #include "VkHelper.h"
-#include "glm/gtc/type_ptr.hpp"
 #include "CalcTangent.h"
 #include <stb_image.h>
+
+#define GLM_SWIZZLE
+#include "glm/glm.hpp"
+#include "glm/gtc/type_ptr.hpp"
 
 namespace Flare {
     void GltfScene::init(const std::filesystem::path &path, GpuDevice *gpuDevice, AsyncLoader *asyncLoader) {
@@ -61,6 +64,9 @@ namespace Flare {
                                     .type = VK_IMAGE_TYPE_2D,
                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
                             };
+                            if (cgltfImage->name) {
+                                textureCI.name = cgltfImage->name;
+                            }
 
                             images[i] = gpu->createTexture(textureCI);
 
@@ -89,6 +95,9 @@ namespace Flare {
                             .type = VK_IMAGE_TYPE_2D,
                             .viewType = VK_IMAGE_VIEW_TYPE_2D,
                     };
+                    if (cgltfImage->name) {
+                        textureCI.name = cgltfImage->name;
+                    }
 
                     images[i] = gpu->createTexture(textureCI);
 
@@ -117,6 +126,9 @@ namespace Flare {
                         .type = VK_IMAGE_TYPE_2D,
                         .viewType = VK_IMAGE_VIEW_TYPE_2D,
                 };
+                if (cgltfImage->name) {
+                    textureCI.name = cgltfImage->name;
+                }
 
                 images[i] = gpu->createTexture(textureCI);
 
@@ -304,10 +316,24 @@ namespace Flare {
                             meshPrimitive.positions.resize(accessor.count);
                             const float *positionBuffer = reinterpret_cast<const float *>(bufferData);
 
+                            glm::vec3 aabbMin(FLT_MAX, FLT_MAX, FLT_MAX);
+                            glm::vec3 aabbMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
                             for (size_t pos_i = 0; pos_i < accessor.count; pos_i++) {
                                 const float *pos = positionBuffer + pos_i * 3;
                                 meshPrimitive.positions[pos_i] = glm::vec4(pos[0], pos[1], pos[2], 1.f);
+                                aabbMin.x = std::min(aabbMin.x, pos[0]);
+                                aabbMax.x = std::max(aabbMax.x, pos[0]);
+                                aabbMin.y = std::min(aabbMin.y, pos[1]);
+                                aabbMax.y = std::max(aabbMax.y, pos[1]);
+                                aabbMin.z = std::min(aabbMin.z, pos[2]);
+                                aabbMax.z = std::max(aabbMax.z, pos[2]);
                             }
+
+                            meshPrimitive.bounds.origin = (aabbMin + aabbMax) / 2.f;
+                            meshPrimitive.bounds.extents = (aabbMin - aabbMax) / 2.f;
+                            meshPrimitive.bounds.radius = glm::length(meshPrimitive.bounds.extents);
+
                             break;
                         }
                         case cgltf_attribute_type_normal: { // float3, convert to vec of float4
@@ -429,11 +455,11 @@ namespace Flare {
                 if (!map.contains(meshPrim.id)) {
                     meshDraw.indexCount = meshPrim.indices.size();
                     meshDraw.id = meshPrim.id;
-
                     meshDraw.indexOffset = indices.size();
-                    indices.insert(indices.end(), meshPrim.indices.begin(), meshPrim.indices.end());
-
                     meshDraw.vertexOffset = positions.size();
+                    meshDraw.bounds = meshPrim.bounds;
+
+                    indices.insert(indices.end(), meshPrim.indices.begin(), meshPrim.indices.end());
                     positions.insert(positions.end(), meshPrim.positions.begin(), meshPrim.positions.end());
                     normals.insert(normals.end(), meshPrim.normals.begin(), meshPrim.normals.end());
                     uvs.insert(uvs.end(), meshPrim.uvs.begin(), meshPrim.uvs.end());
@@ -445,6 +471,7 @@ namespace Flare {
                     meshDraw.indexCount = meshPrim.indices.size();
                     meshDraw.indexOffset = map.at(meshPrim.id).back().indexOffset;
                     meshDraw.vertexOffset = map.at(meshPrim.id).back().vertexOffset;
+                    meshDraw.bounds = map.at(meshPrim.id).back().bounds;
 
                     map.at(meshPrim.id).push_back(meshDraw);
                 }

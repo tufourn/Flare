@@ -1128,12 +1128,19 @@ namespace Flare {
         VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
 
         if (ci.mapped) {
-            allocCI.flags =
-                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
+
+        if (ci.readback) {
+            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
         vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
                         &buffer->allocationInfo);
+
+        if (!ci.name.empty()) {
+            setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, "Buffer " + ci.name);
+        }
 
         buffer->size = ci.size;
         buffer->name = ci.name;
@@ -1185,6 +1192,9 @@ namespace Flare {
 
         vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
                         &buffer->allocationInfo);
+        if (!ci.name.empty()) {
+            setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, "Uniform " + ci.name);
+        }
 
         buffer->size = ci.size;
         buffer->name = ci.name;
@@ -1297,6 +1307,9 @@ namespace Flare {
         };
 
         vmaCreateImage(allocator, &imageCI, &allocCI, &texture->image, &texture->allocation, nullptr);
+        if (!ci.name.empty()) {
+            setVkObjectName(texture->image, VK_OBJECT_TYPE_IMAGE, "Image " + ci.name);
+        }
 
         VkImageViewCreateInfo imageViewCI = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1310,6 +1323,9 @@ namespace Flare {
         };
 
         vkCreateImageView(device, &imageViewCI, nullptr, &texture->imageView);
+        if (!ci.name.empty()) {
+            setVkObjectName(texture->imageView, VK_OBJECT_TYPE_IMAGE_VIEW, "Image View " + ci.name);
+        }
 
         if (ci.initialData) {
             size_t dataSize = ci.width * ci.height * ci.depth * 4;

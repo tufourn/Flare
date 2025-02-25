@@ -48,7 +48,7 @@ namespace Flare {
     }
 
     void Camera::mouseCallback(GLFWwindow *window, double xPos, double yPos) {
-        ImGuiIO& io = ImGui::GetIO();
+        ImGuiIO &io = ImGui::GetIO();
         if (io.WantCaptureMouse) {
             return;
         }
@@ -126,7 +126,7 @@ namespace Flare {
 
 
     void Camera::keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods) {
-        ImGuiIO& io = ImGui::GetIO();
+        ImGuiIO &io = ImGui::GetIO();
         if (io.WantCaptureKeyboard) {
             return;
         }
@@ -146,11 +146,22 @@ namespace Flare {
     }
 
     void Camera::mouseButtonCallback(GLFWwindow *window, int button, int action, int mods) {
-        ImGuiIO& io = ImGui::GetIO();
+        ImGuiIO &io = ImGui::GetIO();
         if (io.WantCaptureMouse) {
             return;
         }
         Camera *camera = reinterpret_cast<Camera *>(glfwGetWindowUserPointer(window));
         camera->processMouseButton(button, action);
+    }
+
+    void Camera::setAspectRatio(float ratio) {
+        aspectRatio = ratio;
+    }
+
+    glm::mat4 Camera::getProjectionMatrix() const {
+        glm::mat4 projection = glm::perspectiveZO(glm::radians(fov), aspectRatio, nearPlane, farPlane);
+        projection[1][1] *= -1;
+
+        return projection;
     }
 }

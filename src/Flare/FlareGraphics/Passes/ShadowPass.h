@@ -1,9 +1,11 @@
 #pragma once
 
 #include "../GpuResources.h"
+#include "../RingBuffer.h"
 
 namespace Flare {
     struct GpuDevice;
+    struct AsyncLoader;
 
     static constexpr uint32_t SHADOW_RESOLUTION_MULTIPLIER = 4; // render shadows at 4x resolution of swapchain image
 
@@ -21,8 +23,9 @@ namespace Flare {
 
         void shutdown();
 
+        void updateUniforms(AsyncLoader *asyncLoader);
+
         void render(VkCommandBuffer cmd,
-                    uint32_t bufferOffset,
                     Handle<Buffer> indexBuffer,
                     Handle<Buffer> indirectDrawBuffer,
                     uint32_t count);
@@ -34,5 +37,8 @@ namespace Flare {
 
         PipelineCI pipelineCI;
         Handle<Pipeline> pipelineHandle;
+
+        ShadowUniform uniforms;
+        RingBuffer shadowUniformRingBuffer;
     };
 }
