@@ -32,6 +32,8 @@ namespace Flare {
 
         GpuDevice *gpu = nullptr;
 
+        bool enable = true;
+
         Handle<Texture> depthTextureHandle;
         Handle<Sampler> samplerHandle;
 

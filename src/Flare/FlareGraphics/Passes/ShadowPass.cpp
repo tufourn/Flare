@@ -90,7 +90,6 @@ namespace Flare {
         VkHelper::transitionImage(cmd, texture->image,
                                   VK_IMAGE_LAYOUT_UNDEFINED,
                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
         VkRenderingAttachmentInfo depthAttachment = {
                 .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
                 .pNext = nullptr,
@@ -115,32 +114,35 @@ namespace Flare {
         };
 
         vkCmdBeginRendering(cmd, &renderingInfo);
-        vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
-        vkCmdBindIndexBuffer(cmd, gpu->getBuffer(indexBuffer)->buffer, 0, VK_INDEX_TYPE_UINT32);
 
-        vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
-                                gpu->bindlessDescriptorSets.size(), gpu->bindlessDescriptorSets.data(),
-                                0, nullptr);
-        VkViewport viewport = {
-                .x = 0.f,
-                .y = 0.f,
-                .width = static_cast<float>(texture->width),
-                .height = static_cast<float>(texture->height),
-                .minDepth = 0.f,
-                .maxDepth = 1.f,
-        };
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        if (enable) {
+            vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
+            vkCmdBindIndexBuffer(cmd, gpu->getBuffer(indexBuffer)->buffer, 0, VK_INDEX_TYPE_UINT32);
 
-        VkRect2D scissor = {
-                .offset = {0, 0},
-                .extent = {texture->width, texture->height},
-        };
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+            vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
+                                    gpu->bindlessDescriptorSets.size(), gpu->bindlessDescriptorSets.data(),
+                                    0, nullptr);
+            VkViewport viewport = {
+                    .x = 0.f,
+                    .y = 0.f,
+                    .width = static_cast<float>(texture->width),
+                    .height = static_cast<float>(texture->height),
+                    .minDepth = 0.f,
+                    .maxDepth = 1.f,
+            };
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-        vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pc);
+            VkRect2D scissor = {
+                    .offset = {0, 0},
+                    .extent = {texture->width, texture->height},
+            };
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-        vkCmdDrawIndexedIndirect(cmd, gpu->getBuffer(indirectDrawBuffer)->buffer, 0, count,
-                                 sizeof(IndirectDrawData));
+            vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pc);
+
+            vkCmdDrawIndexedIndirect(cmd, gpu->getBuffer(indirectDrawBuffer)->buffer, 0, count,
+                                     sizeof(IndirectDrawData));
+        }
 
         vkCmdEndRendering(cmd);
 
@@ -159,4 +161,5 @@ namespace Flare {
                 }
         );
     }
+
 }

@@ -453,6 +453,7 @@ struct TriangleApp : Application {
                 } else {
                     ImGui::Text("Draw count: %zu", indirectDrawDatas.size());
                 }
+                ImGui::Checkbox("Shadows", &shadowPass.enable);
                 ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
                 ImGui::Checkbox("Fixed frustum", &fixedFrustum);
                 ImGui::SliderFloat3("Light position",
