@@ -75,15 +75,34 @@ namespace Flare {
         indexBufferHandle = gpu->createBuffer(indexBufferCI);
 
         PipelineCI offscreenPipelineCI;
+        offscreenPipelineCI.rendering.colorFormats.push_back(VK_FORMAT_R32G32B32A32_SFLOAT);
+
+        offscreenPipelineCI.shaderStages = {
+                ShaderStage{"CoreShaders/BrdfLut.vert", VK_SHADER_STAGE_VERTEX_BIT},
+                ShaderStage{"CoreShaders/BrdfLut.frag", VK_SHADER_STAGE_FRAGMENT_BIT},
+        };
+        brdfLutPipelineHandle = gpu->createPipeline(offscreenPipelineCI);
+
         offscreenPipelineCI.shaderStages = {
                 ShaderStage{"CoreShaders/Cubemap.vert", VK_SHADER_STAGE_VERTEX_BIT},
                 ShaderStage{"CoreShaders/Cubemap.frag", VK_SHADER_STAGE_FRAGMENT_BIT},
         };
-        offscreenPipelineCI.rendering.colorFormats.push_back(VK_FORMAT_R32G32B32A32_SFLOAT);
         offscreenPipelineCI.vertexInput
                 .addBinding({.binding = 0, .stride = sizeof(glm::vec4), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX})
                 .addAttribute({.location = 0, .binding = 0, .format = VK_FORMAT_R32G32B32A32_SFLOAT, .offset = 0});
         cubemapPipelineHandle = gpu->createPipeline(offscreenPipelineCI);
+
+        offscreenPipelineCI.shaderStages = {
+                ShaderStage{"CoreShaders/Cubemap.vert", VK_SHADER_STAGE_VERTEX_BIT},
+                ShaderStage{"CoreShaders/IrradianceMap.frag", VK_SHADER_STAGE_FRAGMENT_BIT},
+        };
+        irradianceMapPipelineHandle = gpu->createPipeline(offscreenPipelineCI);
+
+        offscreenPipelineCI.shaderStages = {
+                ShaderStage{"CoreShaders/Cubemap.vert", VK_SHADER_STAGE_VERTEX_BIT},
+                ShaderStage{"CoreShaders/PrefilteredCube.frag", VK_SHADER_STAGE_FRAGMENT_BIT},
+        };
+        prefilteredCubePipelineHandle = gpu->createPipeline(offscreenPipelineCI);
 
         PipelineCI skyboxPipelineCI;
         skyboxPipelineCI.shaderStages = {
@@ -146,102 +165,34 @@ namespace Flare {
 
             if (loadedImageHandle.isValid()) {
                 Texture *skyboxTexture = gpu->getTexture(skyboxHandle);
+                Texture *irradianceMap = gpu->getTexture(irradianceMapHandle);
+                Texture *prefilteredCube = gpu->getTexture(prefilteredCubeHandle);
+                Texture *brdfLut = gpu->getTexture(brdfLutHandle);
 
                 VkCommandBuffer cmd = gpu->getCommandBuffer();
                 VkHelper::transitionImage(cmd, skyboxTexture->image,
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                VkHelper::transitionImage(cmd, irradianceMap->image,
+                                          VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                VkHelper::transitionImage(cmd, prefilteredCube->image,
+                                          VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+                VkHelper::transitionImage(cmd, brdfLut->image,
+                                          VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 gpu->submitImmediate(cmd);
 
-                VkRenderingAttachmentInfo colorAttachment = {
-                        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                        .imageView = gpu->getTexture(offscreenImageHandle)->imageView,
-                        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                };
-                VkRenderingInfo renderInfo = {
-                        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                        .renderArea = {
-                                VkOffset2D{0, 0},
-                                {SKYBOX_RESOLUTION, SKYBOX_RESOLUTION}
-                        },
-                        .layerCount = 1,
-                        .colorAttachmentCount = 1,
-                        .pColorAttachments = &colorAttachment,
-                };
+                renderFacesOffscreenAndCopyToCubemap(cubemapPipelineHandle, skyboxHandle,
+                                                     {.data0 = loadedImageHandle.index, .data1 = samplerHandle.index});
 
-                PushConstants pc = {
-                        .data0 = loadedImageHandle.index,
-                        .data1 = samplerHandle.index,
-                };
+                renderFacesOffscreenAndCopyToCubemap(irradianceMapPipelineHandle, irradianceMapHandle,
+                                                     {.data0 = skyboxHandle.index, .data1 = samplerHandle.index});
 
-                Pipeline *cubemapPipeline = gpu->getPipeline(cubemapPipelineHandle);
-
-                VkViewport viewport = VkHelper::viewport(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
-                VkRect2D scissor = VkHelper::scissor(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
-
-                for (size_t i = 0; i < faceMatrices.size(); i++) {
-                    pc.mat =
-                            glm::perspective((float) (std::numbers::pi / 2.0), 1.0f, 0.1f, (float) (SKYBOX_RESOLUTION)) *
-                            faceMatrices[i];
-
-                    cmd = gpu->getCommandBuffer();
-
-                    VkHelper::transitionImage(cmd, gpu->getTexture(offscreenImageHandle)->image,
-                                              VK_IMAGE_LAYOUT_UNDEFINED,
-                                              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-                    vkCmdBeginRendering(cmd, &renderInfo);
-
-                    vkCmdBindPipeline(cmd, cubemapPipeline->bindPoint, cubemapPipeline->pipeline);
-                    vkCmdSetViewport(cmd, 0, 1, &viewport);
-                    vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-                    vkCmdBindDescriptorSets(cmd, cubemapPipeline->bindPoint, cubemapPipeline->pipelineLayout, 0,
-                                            gpu->bindlessDescriptorSets.size(), gpu->bindlessDescriptorSets.data(),
-                                            0, nullptr);
-                    VkDeviceSize offsets[] = {0};
-                    vkCmdBindVertexBuffers(cmd, 0, 1, &gpu->getBuffer(vertexBufferHandle)->buffer, offsets);
-                    vkCmdBindIndexBuffer(cmd, gpu->getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
-                    vkCmdPushConstants(cmd, cubemapPipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0,
-                                       sizeof(PushConstants), &pc);
-                    vkCmdDrawIndexed(cmd, 36, 1, 0, 0, 0);
-                    vkCmdEndRendering(cmd);
-
-                    VkHelper::transitionImage(cmd, gpu->getTexture(offscreenImageHandle)->image,
-                                              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                              VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-                    VkImageCopy copyRegion = {};
-                    copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                    copyRegion.srcSubresource.baseArrayLayer = 0;
-                    copyRegion.srcSubresource.mipLevel = 0;
-                    copyRegion.srcSubresource.layerCount = 1;
-                    copyRegion.srcOffset = {0, 0, 0};
-
-                    copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                    copyRegion.dstSubresource.baseArrayLayer = i;
-                    copyRegion.dstSubresource.mipLevel = 0;
-                    copyRegion.dstSubresource.layerCount = 1;
-                    copyRegion.dstOffset = {0, 0, 0};
-
-                    copyRegion.extent.width = SKYBOX_RESOLUTION;
-                    copyRegion.extent.height = SKYBOX_RESOLUTION;
-                    copyRegion.extent.depth = 1;
-
-                    vkCmdCopyImage(
-                            cmd, gpu->getTexture(offscreenImageHandle)->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                            gpu->getTexture(skyboxHandle)->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            1, &copyRegion
-                    );
-
-                    gpu->submitImmediate(cmd);
-                }
-
-                cmd = gpu->getCommandBuffer();
-                VkHelper::genCubemapMips(cmd, skyboxTexture->image, {skyboxTexture->width, skyboxTexture->height});
-                gpu->submitImmediate(cmd);
+                renderFacesOffscreenAndCopyToCubemap(prefilteredCubePipelineHandle, prefilteredCubeHandle,
+                                                     {.data0 = skyboxHandle.index, .data1 = samplerHandle.index});
+                getBrdfLut();
 
                 spdlog::info("Skybox: loaded {}", path.filename().string());
                 loaded = true;
@@ -270,5 +221,166 @@ namespace Flare {
         vkCmdPushConstants(cmd, skyboxPipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0,
                            sizeof(PushConstants), &pc);
         vkCmdDrawIndexed(cmd, 36, 1, 0, 0, 0);
+    }
+
+    void SkyboxPass::renderFacesOffscreenAndCopyToCubemap(Handle<Pipeline> pipelineHandle, Handle<Texture> targetHandle,
+                                                          PushConstants pc) {
+        Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
+        Texture *targetTexture = gpu->getTexture(targetHandle);
+
+        VkRenderingAttachmentInfo colorAttachment = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .imageView = gpu->getTexture(offscreenImageHandle)->imageView,
+                .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        };
+        VkRenderingInfo renderInfo = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                .renderArea = {
+                        VkOffset2D{0, 0},
+                        {SKYBOX_RESOLUTION, SKYBOX_RESOLUTION}
+                },
+                .layerCount = 1,
+                .colorAttachmentCount = 1,
+                .pColorAttachments = &colorAttachment,
+        };
+
+        VkViewport viewport = VkHelper::viewport(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
+        VkRect2D scissor = VkHelper::scissor(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
+
+        for (size_t i = 0; i < faceMatrices.size(); i++) {
+            pc.mat =
+                    glm::perspective((float) (std::numbers::pi / 2.0), 1.0f, 0.1f, (float) (SKYBOX_RESOLUTION)) *
+                    faceMatrices[i];
+
+            VkCommandBuffer cmd = gpu->getCommandBuffer();
+
+            VkHelper::transitionImage(cmd, gpu->getTexture(offscreenImageHandle)->image,
+                                      VK_IMAGE_LAYOUT_UNDEFINED,
+                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+            vkCmdBeginRendering(cmd, &renderInfo);
+
+            vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
+            vkCmdSetViewport(cmd, 0, 1, &viewport);
+            vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+            vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
+                                    gpu->bindlessDescriptorSets.size(), gpu->bindlessDescriptorSets.data(),
+                                    0, nullptr);
+            VkDeviceSize offsets[] = {0};
+            vkCmdBindVertexBuffers(cmd, 0, 1, &gpu->getBuffer(vertexBufferHandle)->buffer, offsets);
+            vkCmdBindIndexBuffer(cmd, gpu->getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0,
+                               sizeof(PushConstants), &pc);
+            vkCmdDrawIndexed(cmd, 36, 1, 0, 0, 0);
+            vkCmdEndRendering(cmd);
+
+            VkHelper::transitionImage(cmd, gpu->getTexture(offscreenImageHandle)->image,
+                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+            VkImageCopy copyRegion = {};
+            copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.srcSubresource.baseArrayLayer = 0;
+            copyRegion.srcSubresource.mipLevel = 0;
+            copyRegion.srcSubresource.layerCount = 1;
+            copyRegion.srcOffset = {0, 0, 0};
+
+            copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyRegion.dstSubresource.baseArrayLayer = i;
+            copyRegion.dstSubresource.mipLevel = 0;
+            copyRegion.dstSubresource.layerCount = 1;
+            copyRegion.dstOffset = {0, 0, 0};
+
+            copyRegion.extent.width = SKYBOX_RESOLUTION;
+            copyRegion.extent.height = SKYBOX_RESOLUTION;
+            copyRegion.extent.depth = 1;
+
+            vkCmdCopyImage(
+                    cmd, gpu->getTexture(offscreenImageHandle)->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    targetTexture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &copyRegion
+            );
+
+            gpu->submitImmediate(cmd);
+        }
+
+        VkCommandBuffer cmd = gpu->getCommandBuffer();
+        VkHelper::genCubemapMips(cmd, targetTexture->image, {targetTexture->width, targetTexture->height});
+        gpu->submitImmediate(cmd);
+
+
+    }
+
+    void SkyboxPass::getBrdfLut() {
+        // todo: save and load brdf lut from file if exists
+
+        Pipeline* brdfLutPipeline = gpu->getPipeline(brdfLutPipelineHandle);
+
+        VkViewport viewport = VkHelper::viewport(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
+        VkRect2D scissor = VkHelper::scissor(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
+
+        VkRenderingAttachmentInfo colorAttachment = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .imageView = gpu->getTexture(offscreenImageHandle)->imageView,
+                .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        };
+        VkRenderingInfo renderInfo = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                .renderArea = {
+                        VkOffset2D{0, 0},
+                        {SKYBOX_RESOLUTION, SKYBOX_RESOLUTION}
+                },
+                .layerCount = 1,
+                .colorAttachmentCount = 1,
+                .pColorAttachments = &colorAttachment,
+        };
+
+        VkCommandBuffer cmd = gpu->getCommandBuffer();
+
+        VkHelper::transitionImage(cmd, gpu->getTexture(offscreenImageHandle)->image,
+                                  VK_IMAGE_LAYOUT_UNDEFINED,
+                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+        vkCmdBeginRendering(cmd, &renderInfo);
+
+        vkCmdBindPipeline(cmd, brdfLutPipeline->bindPoint, brdfLutPipeline->pipeline);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRendering(cmd);
+
+        VkHelper::transitionImage(cmd, gpu->getTexture(offscreenImageHandle)->image,
+                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+        VkImageCopy copyRegion = {};
+        copyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.srcSubresource.baseArrayLayer = 0;
+        copyRegion.srcSubresource.mipLevel = 0;
+        copyRegion.srcSubresource.layerCount = 1;
+        copyRegion.srcOffset = {0, 0, 0};
+
+        copyRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyRegion.dstSubresource.baseArrayLayer = 0;
+        copyRegion.dstSubresource.mipLevel = 0;
+        copyRegion.dstSubresource.layerCount = 1;
+        copyRegion.dstOffset = {0, 0, 0};
+
+        copyRegion.extent.width = SKYBOX_RESOLUTION;
+        copyRegion.extent.height = SKYBOX_RESOLUTION;
+        copyRegion.extent.depth = 1;
+
+        vkCmdCopyImage(
+                cmd, gpu->getTexture(offscreenImageHandle)->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                gpu->getTexture(brdfLutHandle)->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &copyRegion
+        );
+
+        gpu->submitImmediate(cmd);
     }
 }

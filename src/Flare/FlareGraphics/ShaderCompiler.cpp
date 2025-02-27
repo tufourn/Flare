@@ -197,7 +197,6 @@ namespace Flare {
         } else {
             spvFile.write(reinterpret_cast<const char *>(spirv.data()), spirv.size() * sizeof(uint32_t));
             spvFile.close();
-            spdlog::info("Saved SPIR-V to: {}", spvPath.string());
         }
 
         return spirv;

@@ -13,9 +13,11 @@ namespace Flare {
 
     static const std::array<glm::mat4, 6> faceMatrices = {
             // POSITIVE_X
-            glm::rotate(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)), glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
+            glm::rotate(glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                        glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
             // NEGATIVE_X
-            glm::rotate(glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)), glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
+            glm::rotate(glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                        glm::radians(180.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
             // POSITIVE_Y
             glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f)),
             // NEGATIVE_Y
@@ -27,7 +29,7 @@ namespace Flare {
     };
 
     struct SkyboxPass {
-        void init(GpuDevice* gpuDevice);
+        void init(GpuDevice *gpuDevice);
 
         void shutdown();
 
@@ -35,7 +37,12 @@ namespace Flare {
 
         void render(VkCommandBuffer cmd, glm::mat4 projection, glm::mat3 view);
 
-        GpuDevice* gpu;
+        void renderFacesOffscreenAndCopyToCubemap(Handle<Pipeline> pipelineHandle, Handle<Texture> targetHandle,
+                                                  PushConstants pc);
+
+        void getBrdfLut();
+
+        GpuDevice *gpu;
 
         bool loaded = false;
 

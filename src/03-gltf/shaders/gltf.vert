@@ -16,6 +16,10 @@ struct Globals {
     mat4 mvp;
     mat4 lightSpaceMatrix;
 
+    Light light;
+
+    vec4 cameraPos;
+
     uint positionBufferIndex;
     uint normalBufferIndex;
     uint uvBufferIndex;
@@ -26,11 +30,13 @@ struct Globals {
     uint indirectDrawDataBufferIndex;
     uint tangentBufferIndex;
 
-    Light light;
-
     uint shadowDepthTextureIndex;
     uint shadowSamplerIndex;
-    float pad[2];
+    uint irradianceMapIndex;
+    uint prefilteredCubeIndex;
+
+    uint brdfLutIndex;
+    uint cubemapSamplerIndex;
 };
 
 const mat4 biasMat = mat4(

@@ -21,6 +21,10 @@ struct TriangleApp : Application {
         glm::mat4 mvp;
         glm::mat4 lightSpaceMatrix;
 
+        Light light;
+
+        glm::vec4 cameraPos;
+
         uint32_t positionBufferIndex;
         uint32_t normalBufferIndex;
         uint32_t uvBufferIndex;
@@ -31,11 +35,13 @@ struct TriangleApp : Application {
         uint32_t indirectDrawDataBufferIndex;
         uint32_t tangentBufferIndex;
 
-        Light light;
-
         uint32_t shadowDepthTextureIndex;
         uint32_t shadowSamplerIndex;
-        float pad[2];
+        uint32_t irradianceMapIndex;
+        uint32_t prefilteredCubeIndex;
+
+        uint32_t brdfLutIndex;
+        uint32_t cubemapSamplerIndex;
     };
 
     Globals globals;
@@ -68,10 +74,11 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu, &asyncLoader);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/structure.glb", &gpu, &asyncLoader);
-//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -235,6 +242,11 @@ struct TriangleApp : Application {
         globals.shadowDepthTextureIndex = shadowPass.depthTextureHandle.index;
         globals.shadowSamplerIndex = shadowPass.samplerHandle.index;
 
+        globals.irradianceMapIndex = skyboxPass.irradianceMapHandle.index;
+        globals.prefilteredCubeIndex = skyboxPass.prefilteredCubeHandle.index;
+        globals.brdfLutIndex = skyboxPass.brdfLutHandle.index;
+        globals.cubemapSamplerIndex = skyboxPass.samplerHandle.index;
+
         globals.light = {
                 .position = {-4.f, 12.f, 2.f},
                 .radius = 1.f,
@@ -313,6 +325,7 @@ struct TriangleApp : Application {
                 glm::mat4 projection = camera.getProjectionMatrix();
                 globals.mvp = projection * view;
                 globals.lightSpaceMatrix = lightSpaceMatrix;
+                globals.cameraPos = glm::vec4(camera.position, 1.0);
 
                 if (shouldFrustumCull) {
                     globals.indirectDrawDataBufferIndex = culledIndirectDrawDataBufferHandle.index;
