@@ -1268,12 +1268,19 @@ namespace Flare {
 
         Texture *texture = textures.get(handle);
 
+        uint32_t mipLevel = VkHelper::getMipLevel(ci.width, ci.height);
+
         texture->width = ci.width;
         texture->height = ci.height;
         texture->depth = ci.depth;
         texture->format = ci.format;
         texture->name = ci.name;
         texture->handle = handle;
+        if (ci.genMips) {
+            texture->mipLevel = mipLevel;
+        } else {
+            texture->mipLevel = 1;
+        }
 
         VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
         if (ci.format == VK_FORMAT_D32_SFLOAT) {
@@ -1293,7 +1300,7 @@ namespace Flare {
                         .height = ci.height,
                         .depth = ci.depth,
                 },
-                .mipLevels = ci.mipCount,
+                .mipLevels = ci.genMips ? mipLevel : 1,
                 .arrayLayers = ci.layerCount,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -1328,61 +1335,7 @@ namespace Flare {
         }
 
         if (ci.initialData) {
-            size_t dataSize = ci.width * ci.height * ci.depth * 4;
-
-            BufferCI stagingBufferCI = {
-                    .size = dataSize,
-                    .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    .mapped = true,
-            };
-            Handle<Buffer> textureStagingBufferHandle = createBuffer(stagingBufferCI);
-            Buffer *textureStagingBuffer = buffers.get(textureStagingBufferHandle);
-
-            memcpy(textureStagingBuffer->allocationInfo.pMappedData, ci.initialData, dataSize);
-
-            VkCommandBuffer cmd = getCommandBuffer();
-            VkHelper::transitionImage(cmd, texture->image, VK_IMAGE_LAYOUT_UNDEFINED,
-                                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-            VkBufferImageCopy2 region = {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
-                    .pNext = nullptr,
-                    .bufferOffset = 0,
-                    .bufferRowLength = 0,
-                    .bufferImageHeight = 0,
-                    .imageSubresource = {
-                            .aspectMask = static_cast<VkImageAspectFlags>(ci.format == VK_FORMAT_D32_SFLOAT ?
-                                                                          VK_IMAGE_ASPECT_DEPTH_BIT :
-                                                                          VK_IMAGE_ASPECT_COLOR_BIT),
-                            .mipLevel = 0,
-                            .baseArrayLayer = 0,
-                            .layerCount = 1,
-                    },
-                    .imageOffset = {0, 0, 0},
-                    .imageExtent = {ci.width, ci.height, ci.depth},
-            };
-
-            VkCopyBufferToImageInfo2 copyInfo = {
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
-                    .pNext = nullptr,
-                    .srcBuffer = textureStagingBuffer->buffer,
-                    .dstImage = texture->image,
-                    .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                    .regionCount = 1,
-                    .pRegions = &region,
-            };
-
-            vkCmdCopyBufferToImage2(cmd, &copyInfo);
-
-            VkHelper::transitionImage(cmd, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-            submitImmediate(cmd);
-
-            // todo: mips
-
-            // todo: keep a persistently mapped staging buffer, and recreate it if needed?
-            destroyBuffer(textureStagingBufferHandle);
+            uploadTextureData(handle, {ci.width, ci.height, ci.depth}, ci.initialData);
         }
 
         VkDescriptorImageInfo imageInfo = {
@@ -1444,7 +1397,7 @@ namespace Flare {
 //                .compareEnable;
 //                .compareOp;
 //                .minLod;
-//                .maxLod;
+                .maxLod = 16,
                 .borderColor = ci.borderColor,
 //                .unnormalizedCoordinates;
         };
@@ -1661,7 +1614,6 @@ namespace Flare {
                 .width = 1,
                 .height = 1,
                 .depth = 1,
-                .mipCount = 1,
                 .layerCount = 1,
                 .format = VK_FORMAT_R8G8B8A8_UNORM,
                 .type = VK_IMAGE_TYPE_2D,
@@ -1696,5 +1648,65 @@ namespace Flare {
         }
         pipelines.swap(handle, recreatedHandle);
         destroyPipeline(recreatedHandle); // destroy old pipeline
+    }
+
+    void GpuDevice::uploadTextureData(Handle<Texture> handle, VkExtent3D extent, void *data, bool genMips) {
+        Texture *texture = getTexture(handle);
+
+        size_t size = extent.width * extent.height * extent.depth * 4;
+
+        BufferCI stagingBufferCI = {
+                .size = size,
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .mapped = true,
+        };
+        Handle<Buffer> textureStagingBufferHandle = createBuffer(stagingBufferCI);
+        Buffer *textureStagingBuffer = buffers.get(textureStagingBufferHandle);
+
+        memcpy(textureStagingBuffer->allocationInfo.pMappedData, data, size);
+
+        VkCommandBuffer cmd = getCommandBuffer();
+        VkHelper::transitionImage(cmd, texture->image, VK_IMAGE_LAYOUT_UNDEFINED,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        VkBufferImageCopy2 region = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2,
+                .pNext = nullptr,
+                .bufferOffset = 0,
+                .bufferRowLength = 0,
+                .bufferImageHeight = 0,
+                .imageSubresource = {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .mipLevel = 0,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                },
+                .imageOffset = {0, 0, 0},
+                .imageExtent = extent,
+        };
+
+        VkCopyBufferToImageInfo2 copyInfo = {
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
+                .pNext = nullptr,
+                .srcBuffer = textureStagingBuffer->buffer,
+                .dstImage = texture->image,
+                .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .regionCount = 1,
+                .pRegions = &region,
+        };
+
+        vkCmdCopyBufferToImage2(cmd, &copyInfo);
+
+        if (genMips) {
+            VkHelper::genMips(cmd, texture->image, {texture->width, texture->height});
+        } else {
+            VkHelper::transitionImage(cmd, texture->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+
+        submitImmediate(cmd);
+
+        // todo: keep a persistently mapped staging buffer, and recreate it if needed?
+        destroyBuffer(textureStagingBufferHandle);
     }
 }

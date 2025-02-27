@@ -12,7 +12,6 @@ namespace Flare {
                 .width = gpu->swapchainExtent.width * SHADOW_RESOLUTION_MULTIPLIER,
                 .height = gpu->swapchainExtent.height * SHADOW_RESOLUTION_MULTIPLIER,
                 .depth = 1,
-                .mipCount = 1,
                 .layerCount = 1,
                 .format = VK_FORMAT_D32_SFLOAT,
                 .type = VK_IMAGE_TYPE_2D,

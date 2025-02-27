@@ -102,6 +102,8 @@ namespace Flare {
 
         Handle<Texture> createTexture(const TextureCI &ci);
 
+        void uploadTextureData(Handle<Texture> handle, VkExtent3D extent, void *data, bool genMips = true);
+
         void destroyTexture(Handle<Texture> handle);
 
         Handle<Sampler> createSampler(const SamplerCI &ci);

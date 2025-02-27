@@ -143,4 +143,6 @@ void main() {
     //    vec3 finalColor = (diffuse + specular);
 
     outColor = vec4(finalColor, 1.0);
+//    float lod = textureQueryLod(sampler2D(globalTextures[albedoIndex.textureIndex], globalSamplers[albedoIndex.samplerIndex]), inUV).x;
+//    outColor += vec4(0.2, 0.0, 0.0, 0.0) * lod;
 }

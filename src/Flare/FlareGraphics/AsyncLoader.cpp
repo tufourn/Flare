@@ -279,6 +279,11 @@ namespace Flare {
 
             vkQueueSubmit2(gpu->transferQueue, 1, &submitInfo, transferFence);
 
+            if (request.texture && request.texture->mipLevel > 1) {
+                VkHelper::genMips(gpu->getCommandBuffer(), request.texture->image,
+                                  {request.texture->width, request.texture->height});
+            }
+
             if (request.texture) {
                 std::lock_guard<std::mutex> lock(textureMutex);
                 pendingTextures.push_back(request.texture);
@@ -298,7 +303,7 @@ namespace Flare {
             return;
         }
 
-        for (const auto& texture : pendingTextures) {
+        for (const auto &texture: pendingTextures) {
             VkImageMemoryBarrier2 barrier = {
                     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
                     .pNext = nullptr,
@@ -341,7 +346,7 @@ namespace Flare {
             return;
         }
 
-        for (const auto& buffer : pendingBuffers) {
+        for (const auto &buffer: pendingBuffers) {
             VkBufferMemoryBarrier2 barrier = {
                     .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
                     .pNext = nullptr,

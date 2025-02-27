@@ -19,5 +19,8 @@ namespace VkHelper {
 
     VkSamplerMipmapMode extractGltfMipmapMode(int gltfMinFilter);
 
+    uint32_t getMipLevel(uint32_t width, uint32_t height);
+
+    void genMips(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize);
 }
 

@@ -6,6 +6,7 @@
 #include <stb_image.h>
 
 #define GLM_SWIZZLE
+
 #include "glm/glm.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
@@ -57,25 +58,28 @@ namespace Flare {
                                     &width, &height, &channelCount, STBI_rgb_alpha);
 
                             TextureCI textureCI = {
+                                    .initialData = stbData,
                                     .width = static_cast<uint32_t>(width),
                                     .height = static_cast<uint32_t>(height),
                                     .depth = 1,
                                     .format = VK_FORMAT_R8G8B8A8_UNORM,
                                     .type = VK_IMAGE_TYPE_2D,
                                     .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                    .genMips = true,
                             };
                             if (cgltfImage->name) {
                                 textureCI.name = cgltfImage->name;
                             }
 
                             images[i] = gpu->createTexture(textureCI);
+                            free(stbData);
 
-                            asyncLoader->uploadRequests.emplace_back(
-                                    UploadRequest{
-                                            .texture = gpu->getTexture(images[i]),
-                                            .data = stbData, // asyncLoader will free stbData
-                                    }
-                            );
+//                            asyncLoader->uploadRequests.emplace_back(
+//                                    UploadRequest{
+//                                            .texture = gpu->getTexture(images[i]),
+//                                            .data = stbData, // asyncLoader will free stbData
+//                                    }
+//                            );
 
                             free(imageData);
                         }
@@ -85,28 +89,32 @@ namespace Flare {
                 } else {
                     std::filesystem::path imageFile = directory / uri;
 
-                    stbi_info(imageFile.string().c_str(), &width, &height, &channelCount);
+                    unsigned char *stbData = stbi_load(imageFile.string().c_str(), &width, &height, &channelCount,
+                                                       STBI_rgb_alpha);
 
                     TextureCI textureCI = {
+                            .initialData = stbData,
                             .width = static_cast<uint32_t>(width),
                             .height = static_cast<uint32_t>(height),
                             .depth = 1,
                             .format = VK_FORMAT_R8G8B8A8_UNORM,
                             .type = VK_IMAGE_TYPE_2D,
                             .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                            .genMips = true,
                     };
                     if (cgltfImage->name) {
                         textureCI.name = cgltfImage->name;
                     }
 
                     images[i] = gpu->createTexture(textureCI);
+                    free(stbData);
 
-                    asyncLoader->fileRequests.emplace_back(
-                            FileRequest{
-                                    .path = imageFile,
-                                    .texture = gpu->getTexture(images[i]),
-                            }
-                    );
+//                    asyncLoader->fileRequests.emplace_back(
+//                            FileRequest{
+//                                    .path = imageFile,
+//                                    .texture = gpu->getTexture(images[i]),
+//                            }
+//                    );
                 }
             } else {
                 // image from buffer
@@ -119,12 +127,14 @@ namespace Flare {
                         &width, &height, &channelCount, STBI_rgb_alpha);
 
                 TextureCI textureCI = {
+                        .initialData = stbData,
                         .width = static_cast<uint32_t>(width),
                         .height = static_cast<uint32_t>(height),
                         .depth = 1,
                         .format = VK_FORMAT_R8G8B8A8_UNORM,
                         .type = VK_IMAGE_TYPE_2D,
                         .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                        .genMips = true,
                 };
                 if (cgltfImage->name) {
                     textureCI.name = cgltfImage->name;
@@ -132,12 +142,14 @@ namespace Flare {
 
                 images[i] = gpu->createTexture(textureCI);
 
-                asyncLoader->uploadRequests.emplace_back(
-                        UploadRequest{
-                                .texture = gpu->getTexture(images[i]),
-                                .data = stbData, // asyncLoader will free stbData
-                        }
-                );
+                free(stbData);
+
+//                asyncLoader->uploadRequests.emplace_back(
+//                        UploadRequest{
+//                                .texture = gpu->getTexture(images[i]),
+//                                .data = stbData, // asyncLoader will free stbData
+//                        }
+//                );
             }
         }
 

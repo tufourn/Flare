@@ -351,6 +351,7 @@ struct TriangleApp : Application {
                 asyncLoader.signalTextures(cmd);
                 asyncLoader.signalBuffers(cmd);
 
+                // todo: frustum cull for shadows
                 shadowPass.render(cmd,
                                   indexBufferHandle,
                                   indirectDrawDataBufferHandle, indirectDrawDatas.size());
@@ -447,7 +448,7 @@ struct TriangleApp : Application {
 
                 uint32_t drawCount = *reinterpret_cast<uint32_t *>(gpu.getBuffer(
                         countBufferHandle)->allocationInfo.pMappedData);
-                ImGui::Begin("Light");
+                ImGui::Begin("Options");
                 if (shouldFrustumCull) {
                     ImGui::Text("Draw count: %i (culled %zu)", drawCount, indirectDrawDatas.size() - drawCount);
                 } else {
