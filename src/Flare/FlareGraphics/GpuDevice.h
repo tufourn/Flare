@@ -24,6 +24,8 @@ namespace Flare {
     static constexpr uint32_t ACCEL_STRUCT_SET = 5;
     static constexpr uint32_t SET_COUNT = 6;
 
+    static constexpr size_t STAGING_BUFFER_SIZE_MB = 128;
+
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
         uint32_t buffers = 256;
@@ -166,6 +168,7 @@ namespace Flare {
 
         VmaAllocator allocator;
 
+        Handle<Buffer> stagingBufferHandle;
         Handle<Sampler> defaultSampler;
         Handle<Texture> defaultTexture;
         Handle<Texture> defaultNormalTexture;

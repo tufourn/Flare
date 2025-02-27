@@ -6,8 +6,6 @@
 #include "VkHelper.h"
 
 namespace Flare {
-    static constexpr size_t STAGING_BUFFER_SIZE_MB = 64;
-
     void AsyncLoader::init(GpuDevice &gpuDevice) {
         gpu = &gpuDevice;
 

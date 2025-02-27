@@ -497,6 +497,14 @@ namespace Flare {
             }
         }
 
+        BufferCI stagingBufferCI = {
+                .size = STAGING_BUFFER_SIZE_MB * 1024 * 1024,
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .mapped = true,
+        };
+
+        stagingBufferHandle = createBuffer(stagingBufferCI);
+
         createDefaultTextures();
     }
 
@@ -506,6 +514,7 @@ namespace Flare {
         shaderCompiler.shutdown();
 
         destroyDefaultTextures();
+        destroyBuffer(stagingBufferHandle);
 
         destroyBindlessDescriptorSets();
 
@@ -1681,15 +1690,9 @@ namespace Flare {
     void GpuDevice::uploadTextureData(Texture *texture, void *data, bool genMips) {
         size_t size = texture->width * texture->height * texture->depth * 4;
 
-        BufferCI stagingBufferCI = {
-                .size = size,
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                .mapped = true,
-        };
-        Handle<Buffer> textureStagingBufferHandle = createBuffer(stagingBufferCI);
-        Buffer *textureStagingBuffer = buffers.get(textureStagingBufferHandle);
+        Buffer *stagingBuffer = buffers.get(stagingBufferHandle);
 
-        memcpy(textureStagingBuffer->allocationInfo.pMappedData, data, size);
+        memcpy(stagingBuffer->allocationInfo.pMappedData, data, size);
 
         VkCommandBuffer cmd = getCommandBuffer();
         VkHelper::transitionImage(cmd, texture->image, VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1714,7 +1717,7 @@ namespace Flare {
         VkCopyBufferToImageInfo2 copyInfo = {
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2,
                 .pNext = nullptr,
-                .srcBuffer = textureStagingBuffer->buffer,
+                .srcBuffer = stagingBuffer->buffer,
                 .dstImage = texture->image,
                 .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                 .regionCount = 1,
@@ -1731,22 +1734,12 @@ namespace Flare {
         }
 
         submitImmediate(cmd);
-
-        // todo: keep a persistently mapped staging buffer, and recreate it if needed?
-        destroyBuffer(textureStagingBufferHandle);
     }
 
     void GpuDevice::uploadBufferData(Buffer *buffer, void *data) {
         if (!data) {
             return;
         }
-
-        BufferCI stagingBufferCI = {
-                .size = buffer->size,
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                .mapped = true,
-        };
-        Handle<Buffer> stagingBufferHandle = createBuffer(stagingBufferCI);
         Buffer *stagingBuffer = getBuffer(stagingBufferHandle);
 
         memcpy(stagingBuffer->allocationInfo.pMappedData, data, buffer->size);
@@ -1790,7 +1783,5 @@ namespace Flare {
         vkCmdPipelineBarrier2(cmd, &depInfo);
 
         submitImmediate(cmd);
-
-        destroyBuffer(stagingBufferHandle);
     }
 }

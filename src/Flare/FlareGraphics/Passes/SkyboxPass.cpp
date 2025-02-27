@@ -164,22 +164,17 @@ namespace Flare {
             loadedImageHandle = gpu->createTexture(textureCI);
 
             if (loadedImageHandle.isValid()) {
-                Texture *skyboxTexture = gpu->getTexture(skyboxHandle);
-                Texture *irradianceMap = gpu->getTexture(irradianceMapHandle);
-                Texture *prefilteredCube = gpu->getTexture(prefilteredCubeHandle);
-                Texture *brdfLut = gpu->getTexture(brdfLutHandle);
-
                 VkCommandBuffer cmd = gpu->getCommandBuffer();
-                VkHelper::transitionImage(cmd, skyboxTexture->image,
+                VkHelper::transitionImage(cmd, gpu->getTexture(skyboxHandle)->image,
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                VkHelper::transitionImage(cmd, irradianceMap->image,
+                VkHelper::transitionImage(cmd, gpu->getTexture(irradianceMapHandle)->image,
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                VkHelper::transitionImage(cmd, prefilteredCube->image,
+                VkHelper::transitionImage(cmd, gpu->getTexture(prefilteredCubeHandle)->image,
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-                VkHelper::transitionImage(cmd, brdfLut->image,
+                VkHelper::transitionImage(cmd, gpu->getTexture(brdfLutHandle)->image,
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
                 gpu->submitImmediate(cmd);
