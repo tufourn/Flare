@@ -82,6 +82,8 @@ namespace Flare {
 
         Handle<Buffer> createBuffer(const BufferCI &ci);
 
+        void uploadBufferData(Buffer* buffer, void* data);
+
         void destroyBuffer(Handle<Buffer> handle);
 
         Handle<Buffer> createUniform(const BufferCI &ci);

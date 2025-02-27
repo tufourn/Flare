@@ -7,7 +7,6 @@
 
 namespace Flare {
     struct GpuDevice;
-    struct AsyncLoader;
 
     static constexpr uint32_t SKYBOX_RESOLUTION = 1024;
 

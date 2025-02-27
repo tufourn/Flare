@@ -2,11 +2,9 @@
 
 #include "../GpuResources.h"
 #include "../RingBuffer.h"
-#include "../AsyncLoader.h"
 
 namespace Flare {
     struct GpuDevice;
-    struct AsyncLoader;
 
     struct FrustumPlanes {
         glm::vec4 left;
@@ -34,7 +32,7 @@ namespace Flare {
 
         static FrustumPlanes getFrustumPlanes(glm::mat4 mat, bool normalize = true);
 
-        void updateUniforms(AsyncLoader *asyncLoader);
+        void updateUniforms();
 
         void cull(VkCommandBuffer cmd);
 

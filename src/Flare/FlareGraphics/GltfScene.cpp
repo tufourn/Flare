@@ -1,5 +1,4 @@
 #include "GltfScene.h"
-#include "AsyncLoader.h"
 #include "GpuDevice.h"
 #include "VkHelper.h"
 #include "CalcTangent.h"
@@ -11,7 +10,7 @@
 #include "glm/gtc/type_ptr.hpp"
 
 namespace Flare {
-    void GltfScene::init(const std::filesystem::path &path, GpuDevice *gpuDevice, AsyncLoader *asyncLoader) {
+    void GltfScene::init(const std::filesystem::path &path, GpuDevice *gpuDevice) {
         gpu = gpuDevice;
 
         std::filesystem::path directory = path.parent_path();
@@ -74,13 +73,6 @@ namespace Flare {
                             images[i] = gpu->createTexture(textureCI);
                             free(stbData);
 
-//                            asyncLoader->uploadRequests.emplace_back(
-//                                    UploadRequest{
-//                                            .texture = gpu->getTexture(images[i]),
-//                                            .data = stbData, // asyncLoader will free stbData
-//                                    }
-//                            );
-
                             free(imageData);
                         }
                     } else {
@@ -108,13 +100,6 @@ namespace Flare {
 
                     images[i] = gpu->createTexture(textureCI);
                     free(stbData);
-
-//                    asyncLoader->fileRequests.emplace_back(
-//                            FileRequest{
-//                                    .path = imageFile,
-//                                    .texture = gpu->getTexture(images[i]),
-//                            }
-//                    );
                 }
             } else {
                 // image from buffer
@@ -143,13 +128,6 @@ namespace Flare {
                 images[i] = gpu->createTexture(textureCI);
 
                 free(stbData);
-
-//                asyncLoader->uploadRequests.emplace_back(
-//                        UploadRequest{
-//                                .texture = gpu->getTexture(images[i]),
-//                                .data = stbData, // asyncLoader will free stbData
-//                        }
-//                );
             }
         }
 

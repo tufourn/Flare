@@ -1117,6 +1117,10 @@ namespace Flare {
 
         Buffer *buffer = buffers.get(handle);
 
+        buffer->size = ci.size;
+        buffer->name = ci.name;
+        buffer->handle = handle;
+
         VkBufferCreateInfo bufferCI = {
                 .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                 .pNext = nullptr,
@@ -1138,67 +1142,13 @@ namespace Flare {
         vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
                         &buffer->allocationInfo);
 
-        if (ci.initialData) {
-            BufferCI stagingBufferCI = {
-                    .size = ci.size,
-                    .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    .mapped = true,
-            };
-            Handle<Buffer> stagingBufferHandle = createBuffer(stagingBufferCI);
-            Buffer *stagingBuffer = getBuffer(stagingBufferHandle);
-
-            memcpy(stagingBuffer->allocationInfo.pMappedData, ci.initialData, ci.size);
-
-            VkCommandBuffer cmd = getCommandBuffer();
-            VkBufferCopy2 region = {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                    .size = ci.size,
-            };
-
-            VkCopyBufferInfo2 copyInfo = {
-                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
-                    .srcBuffer = stagingBuffer->buffer,
-                    .dstBuffer = buffer->buffer,
-                    .regionCount = 1,
-                    .pRegions = &region,
-            };
-
-            vkCmdCopyBuffer2(cmd, &copyInfo);
-
-            VkBufferMemoryBarrier2 barrier = {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-                    .pNext = nullptr,
-                    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-                    .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-                    .dstAccessMask = 0,
-                    .buffer = buffer->buffer,
-                    .offset = 0,
-                    .size = ci.size,
-            };
-
-            VkDependencyInfo depInfo = {
-                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                    .pNext = nullptr,
-                    .dependencyFlags = 0,
-                    .bufferMemoryBarrierCount = 1,
-                    .pBufferMemoryBarriers = &barrier,
-            };
-
-            vkCmdPipelineBarrier2(cmd, &depInfo);
-
-            submitImmediate(cmd);
-
-            destroyBuffer(stagingBufferHandle);
-        }
-
         if (!ci.name.empty()) {
             setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, "Buffer " + ci.name);
         }
 
-        buffer->size = ci.size;
-        buffer->name = ci.name;
-        buffer->handle = handle;
+        if (ci.initialData) {
+            uploadBufferData(buffer, ci.initialData);
+        }
 
         VkDescriptorBufferInfo descBuf = {
                 .buffer = buffer->buffer,
@@ -1229,6 +1179,10 @@ namespace Flare {
 
         Buffer *buffer = uniforms.get(handle);
 
+        buffer->size = ci.size;
+        buffer->name = ci.name;
+        buffer->handle = handle;
+
         VkBufferCreateInfo bufferCI = {
                 .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                 .pNext = nullptr,
@@ -1244,15 +1198,20 @@ namespace Flare {
                     VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
+        if (ci.readback) {
+            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+        }
+
         vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
                         &buffer->allocationInfo);
+
         if (!ci.name.empty()) {
             setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, "Uniform " + ci.name);
         }
 
-        buffer->size = ci.size;
-        buffer->name = ci.name;
-        buffer->handle = handle;
+        if (ci.initialData) {
+            uploadBufferData(buffer, ci.initialData);
+        }
 
         VkDescriptorBufferInfo descBuf = {
                 .buffer = buffer->buffer,
@@ -1775,5 +1734,63 @@ namespace Flare {
 
         // todo: keep a persistently mapped staging buffer, and recreate it if needed?
         destroyBuffer(textureStagingBufferHandle);
+    }
+
+    void GpuDevice::uploadBufferData(Buffer *buffer, void *data) {
+        if (!data) {
+            return;
+        }
+
+        BufferCI stagingBufferCI = {
+                .size = buffer->size,
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                .mapped = true,
+        };
+        Handle<Buffer> stagingBufferHandle = createBuffer(stagingBufferCI);
+        Buffer *stagingBuffer = getBuffer(stagingBufferHandle);
+
+        memcpy(stagingBuffer->allocationInfo.pMappedData, data, buffer->size);
+
+        VkCommandBuffer cmd = getCommandBuffer();
+        VkBufferCopy2 region = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                .size = buffer->size,
+        };
+
+        VkCopyBufferInfo2 copyInfo = {
+                .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                .srcBuffer = stagingBuffer->buffer,
+                .dstBuffer = buffer->buffer,
+                .regionCount = 1,
+                .pRegions = &region,
+        };
+
+        vkCmdCopyBuffer2(cmd, &copyInfo);
+
+        VkBufferMemoryBarrier2 barrier = {
+                .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                .dstAccessMask = 0,
+                .buffer = buffer->buffer,
+                .offset = 0,
+                .size = buffer->size,
+        };
+
+        VkDependencyInfo depInfo = {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .dependencyFlags = 0,
+                .bufferMemoryBarrierCount = 1,
+                .pBufferMemoryBarriers = &barrier,
+        };
+
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+
+        submitImmediate(cmd);
+
+        destroyBuffer(stagingBufferHandle);
     }
 }

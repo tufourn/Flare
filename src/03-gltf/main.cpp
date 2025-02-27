@@ -8,7 +8,6 @@
 #include <glm/glm.hpp>
 
 #include "FlareGraphics/VkHelper.h"
-#include "FlareGraphics/AsyncLoader.h"
 #include "FlareGraphics/GltfScene.h"
 #include "FlareGraphics/FlareImgui.h"
 #include "imgui.h"
@@ -60,7 +59,6 @@ struct TriangleApp : Application {
         };
 
         gpu.init(gpuDeviceCI);
-        asyncLoader.init(gpu);
 
         pipelineCI.shaderStages.emplace_back(ShaderStage{"shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT});
         pipelineCI.shaderStages.emplace_back(ShaderStage{"shaders/gltf.frag", VK_SHADER_STAGE_FRAGMENT_BIT});
@@ -74,11 +72,11 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
-//        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu, &asyncLoader);
-//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
-//        gltf.init("assets/structure.glb", &gpu, &asyncLoader);
-        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/BoxTextured.gltf", &gpu);
+//        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
+        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
+//        gltf.init("assets/structure.glb", &gpu);
+//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -88,108 +86,68 @@ struct TriangleApp : Application {
         globalsRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, globalsBufferCI, RingBuffer::Type::eUniform);
 
         BufferCI positionsCI = {
+                .initialData = gltf.positions.data(),
                 .size = sizeof(glm::vec4) * gltf.positions.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "positions",
         };
         positionBufferHandle = gpu.createBuffer(positionsCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(positionBufferHandle),
-                        .data = (void *) gltf.positions.data(),
-                }
-        );
 
         BufferCI indicesCI = {
+                .initialData = gltf.indices.data(),
                 .size = sizeof(uint32_t) * gltf.indices.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                 .name = "indices",
         };
         indexBufferHandle = gpu.createBuffer(indicesCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(indexBufferHandle),
-                        .data = (void *) gltf.indices.data(),
-                }
-        );
 
         BufferCI textureIndicesCI = {
+                .initialData = gltf.gltfTextures.data(),
                 .size = sizeof(GltfTexture) * gltf.gltfTextures.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "textures",
         };
         textureIndicesHandle = gpu.createBuffer(textureIndicesCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(textureIndicesHandle),
-                        .data = (void *) gltf.gltfTextures.data(),
-                }
-        );
 
         BufferCI uvCI = {
+                .initialData = gltf.uvs.data(),
                 .size = sizeof(glm::vec2) * gltf.uvs.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "uv",
         };
         uvBufferHandle = gpu.createBuffer(uvCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(uvBufferHandle),
-                        .data = (void *) gltf.uvs.data(),
-                }
-        );
 
         BufferCI tangentCI = {
+                .initialData = gltf.tangents.data(),
                 .size = sizeof(glm::vec4) * gltf.tangents.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "tangents",
         };
         tangentBufferHandle = gpu.createBuffer(tangentCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(tangentBufferHandle),
-                        .data = (void *) gltf.tangents.data(),
-                }
-        );
 
         BufferCI transformsCI = {
+                .initialData = gltf.transforms.data(),
                 .size = sizeof(glm::mat4) * gltf.transforms.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "transforms",
         };
         transformBufferHandle = gpu.createBuffer(transformsCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(transformBufferHandle),
-                        .data = (void *) gltf.transforms.data(),
-                }
-        );
 
         BufferCI materialCI = {
+                .initialData = gltf.materials.data(),
                 .size = sizeof(Material) * gltf.materials.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "materials",
         };
         materialBufferHandle = gpu.createBuffer(materialCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(materialBufferHandle),
-                        .data = (void *) gltf.materials.data(),
-                }
-        );
 
         BufferCI normalCI = {
+                .initialData = gltf.normals.data(),
                 .size = sizeof(glm::vec4) * gltf.normals.size(),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "normals",
         };
         normalBufferHandle = gpu.createBuffer(normalCI);
-        asyncLoader.uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu.getBuffer(normalBufferHandle),
-                        .data = (void *) gltf.normals.data(),
-                }
-        );
 
         indirectDrawDatas.resize(gltf.meshDraws.size());
         BufferCI indirectDrawCI = {
@@ -333,27 +291,18 @@ struct TriangleApp : Application {
                     globals.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
                 }
 
-                asyncLoader.uploadRequests.emplace_back(
-                        UploadRequest{
-                                .dstBuffer = gpu.getUniform(globalsRingBuffer.buffer()),
-                                .data = (void *) &globals,
-                        }
-                );
+                gpu.uploadBufferData(gpu.getUniform(globalsRingBuffer.buffer()), &globals);
 
                 // shadows
                 shadowPass.uniforms.lightSpaceMatrix = lightSpaceMatrix;
-                shadowPass.updateUniforms(&asyncLoader);
+                shadowPass.updateUniforms();
 
                 // frustum cull
                 if (!fixedFrustum) {
                     frustumCullPass.uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(projection * view);
                 }
                 frustumCullPass.uniforms.drawCount = indirectDrawDatas.size();
-                frustumCullPass.updateUniforms(&asyncLoader);
-
-                while (!asyncLoader.uploadRequests.empty()) { //todo: proper async transfer
-                    asyncLoader.update();
-                }
+                frustumCullPass.updateUniforms();
 
                 PushConstants pc = {
                         .uniformOffset = globalsRingBuffer.buffer().index,
@@ -363,9 +312,6 @@ struct TriangleApp : Application {
                 imgui.newFrame();
 
                 VkCommandBuffer cmd = gpu.getCommandBuffer();
-
-                asyncLoader.signalTextures(cmd);
-                asyncLoader.signalBuffers(cmd);
 
                 // todo: frustum cull for shadows
                 shadowPass.render(cmd,
@@ -534,14 +480,12 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(tangentBufferHandle);
         gpu.destroyBuffer(boundsBufferHandle);
 
-        asyncLoader.shutdown();
         gpu.shutdown();
         window.shutdown();
     }
 
     Flare::GpuDevice gpu;
     Flare::Window window;
-    Flare::AsyncLoader asyncLoader;
 
     bool shouldReloadPipeline = false;
     bool shouldFrustumCull = true;

@@ -5,7 +5,6 @@
 
 namespace Flare {
     struct GpuDevice;
-    struct AsyncLoader;
 
     static constexpr uint32_t SHADOW_RESOLUTION = 2048;
 
@@ -23,7 +22,7 @@ namespace Flare {
 
         void shutdown();
 
-        void updateUniforms(AsyncLoader *asyncLoader);
+        void updateUniforms();
 
         void render(VkCommandBuffer cmd,
                     Handle<Buffer> indexBuffer,

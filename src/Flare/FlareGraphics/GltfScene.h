@@ -15,8 +15,6 @@ namespace Flare {
     static constexpr uint32_t DEFAULT_OCCLUSION_BASE_OFFSET = 4;
     static constexpr uint32_t DEFAULT_EMISSIVE_BASE_OFFSET = 5;
 
-    struct AsyncLoader;
-
     struct GltfTexture {
         uint32_t imageIndex;
         uint32_t samplerIndex;
@@ -107,7 +105,7 @@ namespace Flare {
         GpuDevice *gpu = nullptr;
         cgltf_data *data = nullptr;
 
-        void init(const std::filesystem::path &path, GpuDevice *gpuDevice, AsyncLoader *asyncLoader);
+        void init(const std::filesystem::path &path, GpuDevice *gpuDevice);
 
         void shutdown();
 

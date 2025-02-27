@@ -2,7 +2,6 @@
 
 #include "../GpuDevice.h"
 #include "../VkHelper.h"
-#include "../AsyncLoader.h"
 
 namespace Flare {
     void ShadowPass::init(GpuDevice *gpuDevice) {
@@ -149,15 +148,9 @@ namespace Flare {
                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
     }
 
-    void ShadowPass::updateUniforms(AsyncLoader *asyncLoader) {
+    void ShadowPass::updateUniforms() {
         shadowUniformRingBuffer.moveToNextBuffer();
-
-        asyncLoader->uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu->getUniform(shadowUniformRingBuffer.buffer()),
-                        .data = (void *) &uniforms,
-                }
-        );
+        gpu->uploadBufferData(gpu->getUniform(shadowUniformRingBuffer.buffer()), &uniforms);
     }
 
 }

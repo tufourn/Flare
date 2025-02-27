@@ -1,7 +1,6 @@
 #include "FrustumCullPass.h"
 
 #include "../GpuDevice.h"
-#include "../AsyncLoader.h"
 
 namespace Flare {
     void FrustumCullPass::init(GpuDevice *gpuDevice) {
@@ -113,14 +112,8 @@ namespace Flare {
         return planes;
     }
 
-    void FrustumCullPass::updateUniforms(AsyncLoader *asyncLoader) {
+    void FrustumCullPass::updateUniforms() {
         frustumUniformRingBuffer.moveToNextBuffer();
-
-        asyncLoader->uploadRequests.emplace_back(
-                UploadRequest{
-                        .dstBuffer = gpu->getUniform(frustumUniformRingBuffer.buffer()),
-                        .data = (void *) &uniforms,
-                }
-        );
+        gpu->uploadBufferData(gpu->getUniform(frustumUniformRingBuffer.buffer()), &uniforms);
     }
 }
