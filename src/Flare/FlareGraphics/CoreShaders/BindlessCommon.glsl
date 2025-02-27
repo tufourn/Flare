@@ -3,12 +3,18 @@
 
 // Push constant containing binding offset of an uniform buffer which can contain the offsets to the other SBOs
 layout (push_constant) uniform PushConstants {
+    mat4 mat;
+
     uint uniformOffset;
-    // we can add other stuff here as well
+    uint data0;
+    uint data1;
+    uint data2;
 } pc;
 
 // Textures and samplers
 layout (set = 2, binding = 0) uniform texture2D globalTextures[];
+layout (set = 2, binding = 0) uniform textureCube cubemapTextures[];
+
 layout (set = 3, binding = 0) uniform writeonly image2D globalStorageImages[];
 layout (set = 4, binding = 0) uniform sampler globalSamplers[];
 

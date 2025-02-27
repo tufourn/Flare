@@ -9,6 +9,10 @@ namespace VkHelper {
 
     VkImageSubresourceRange subresourceRange(bool depth = false);
 
+    VkViewport viewport(float width, float height);
+
+    VkRect2D scissor(float width, float height);
+
     size_t memoryAlign(size_t size, size_t alignment);
 
     VkFilter extractGltfMagFilter(int gltfMagFilter);
@@ -22,5 +26,7 @@ namespace VkHelper {
     uint32_t getMipLevel(uint32_t width, uint32_t height);
 
     void genMips(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize);
+
+    void genCubemapMips(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize);
 }
 

@@ -12,7 +12,6 @@ namespace Flare {
                 .width = SHADOW_RESOLUTION,
                 .height = SHADOW_RESOLUTION,
                 .depth = 1,
-                .layerCount = 1,
                 .format = VK_FORMAT_D32_SFLOAT,
                 .type = VK_IMAGE_TYPE_2D,
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,

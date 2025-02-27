@@ -12,6 +12,7 @@
 #include "FlareGraphics/GltfScene.h"
 #include "FlareGraphics/FlareImgui.h"
 #include "imgui.h"
+#include "FlareGraphics/Passes/SkyboxPass.h"
 
 using namespace Flare;
 
@@ -67,11 +68,10 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-//        gltf.init("assets/Triangle.gltf", &gpu, &asyncLoader);
-//        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
+        gltf.init("assets/BoxTextured.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu, &asyncLoader);
 //        gltf.init("assets/structure.glb", &gpu, &asyncLoader);
-        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
+//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu, &asyncLoader);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -219,6 +219,9 @@ struct TriangleApp : Application {
 
         shadowPass.init(&gpu);
         frustumCullPass.init(&gpu);
+        skyboxPass.init(&gpu);
+        skyboxPass.loadImage("assets/AllSkyFree_Sky_EpicBlueSunset_Equirect.png");
+//        skyboxPass.loadImage("assets/free_hdri_sky_816.jpg");
 
         globals.positionBufferIndex = positionBufferHandle.index;
         globals.normalBufferIndex = normalBufferHandle.index;
@@ -302,7 +305,7 @@ struct TriangleApp : Application {
                 float farPlane = 100.f;
                 glm::mat4 lightView = glm::lookAt(globals.light.position, glm::vec3(0.f, 0.f, 0.f),
                                                   glm::vec3(0.f, 1.f, 0.f));
-                glm::mat4 lightProjection = glm::ortho(-20.f, 20.f, -20.f, 20.f, nearPlane, farPlane);
+                glm::mat4 lightProjection = glm::ortho(-10.f, 10.f, -10.f, 10.f, nearPlane, farPlane);
                 lightProjection[1][1] *= -1;
                 glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 
@@ -444,6 +447,10 @@ struct TriangleApp : Application {
                                              sizeof(IndirectDrawData));
                 }
 
+                if (shouldRenderSkybox) {
+                    skyboxPass.render(cmd, projection, view);
+                }
+
                 vkCmdEndRendering(cmd);
 
                 uint32_t drawCount = *reinterpret_cast<uint32_t *>(gpu.getBuffer(
@@ -457,6 +464,7 @@ struct TriangleApp : Application {
                 ImGui::Checkbox("Shadows", &shadowPass.enable);
                 ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
                 ImGui::Checkbox("Fixed frustum", &fixedFrustum);
+                ImGui::Checkbox("Skybox", &shouldRenderSkybox);
                 ImGui::SliderFloat3("Light position",
                                     reinterpret_cast<float *>(&globals.light.position), -50.f, 50.f);
                 ImGui::SliderFloat("Light intensity", reinterpret_cast<float *>(&globals.light.intensity), 0.f, 100.f);
@@ -480,8 +488,6 @@ struct TriangleApp : Application {
 
                 if (shouldReloadPipeline) {
                     gpu.recreatePipeline(pipelineHandle, pipelineCI);
-                    gpu.recreatePipeline(frustumCullPass.pipelineHandle, frustumCullPass.pipelineCI);
-                    gpu.recreatePipeline(shadowPass.pipelineHandle, shadowPass.pipelineCI);
                     shouldReloadPipeline = false;
                 }
             }
@@ -493,6 +499,7 @@ struct TriangleApp : Application {
 
         shadowPass.shutdown();
         frustumCullPass.shutdown();
+        skyboxPass.shutdown();
 
         imgui.shutdown();
 
@@ -526,6 +533,7 @@ struct TriangleApp : Application {
     bool shouldReloadPipeline = false;
     bool shouldFrustumCull = true;
     bool fixedFrustum = false;
+    bool shouldRenderSkybox = true;
 
     PipelineCI pipelineCI;
     Handle<Pipeline> pipelineHandle;
@@ -557,6 +565,7 @@ struct TriangleApp : Application {
 
     ShadowPass shadowPass;
     FrustumCullPass frustumCullPass;
+    SkyboxPass skyboxPass;
 };
 
 int main() {

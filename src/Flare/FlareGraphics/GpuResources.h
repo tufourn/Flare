@@ -164,6 +164,7 @@ namespace Flare {
     };
 
     struct BufferCI {
+        void* initialData = nullptr;
         size_t size = 0;
         VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
         bool mapped = false;
@@ -202,12 +203,13 @@ namespace Flare {
         uint32_t width = 1;
         uint32_t height = 1;
         uint32_t depth = 1;
-        uint32_t layerCount = 1;
         VkFormat format = VK_FORMAT_UNDEFINED;
         VkImageType type = VK_IMAGE_TYPE_MAX_ENUM;
         VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
         std::string name;
         bool genMips = false;
+        bool cubemap = false;
+        bool offscreenDraw = false;
     };
 
     struct Texture {
@@ -220,6 +222,7 @@ namespace Flare {
         uint32_t height = 1;
         uint32_t depth = 1;
         uint32_t mipLevel = 1;
+        uint32_t layerCount = 1;
 
         Handle<Texture> handle;
         std::string name;
@@ -246,5 +249,14 @@ namespace Flare {
         float radius;
         glm::vec3 extents;
         float pad;
+    };
+
+    struct PushConstants {
+        glm::mat4 mat; // 64
+
+        uint32_t uniformOffset; // 4
+        uint32_t data0; // 4
+        uint32_t data1; // 4
+        uint32_t data2; // 4
     };
 }

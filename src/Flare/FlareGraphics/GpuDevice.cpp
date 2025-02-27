@@ -1138,6 +1138,60 @@ namespace Flare {
         vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
                         &buffer->allocationInfo);
 
+        if (ci.initialData) {
+            BufferCI stagingBufferCI = {
+                    .size = ci.size,
+                    .usageFlags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                    .mapped = true,
+            };
+            Handle<Buffer> stagingBufferHandle = createBuffer(stagingBufferCI);
+            Buffer *stagingBuffer = getBuffer(stagingBufferHandle);
+
+            memcpy(stagingBuffer->allocationInfo.pMappedData, ci.initialData, ci.size);
+
+            VkCommandBuffer cmd = getCommandBuffer();
+            VkBufferCopy2 region = {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
+                    .size = ci.size,
+            };
+
+            VkCopyBufferInfo2 copyInfo = {
+                    .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
+                    .srcBuffer = stagingBuffer->buffer,
+                    .dstBuffer = buffer->buffer,
+                    .regionCount = 1,
+                    .pRegions = &region,
+            };
+
+            vkCmdCopyBuffer2(cmd, &copyInfo);
+
+            VkBufferMemoryBarrier2 barrier = {
+                    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+                    .pNext = nullptr,
+                    .srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                    .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+                    .dstAccessMask = 0,
+                    .buffer = buffer->buffer,
+                    .offset = 0,
+                    .size = ci.size,
+            };
+
+            VkDependencyInfo depInfo = {
+                    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                    .pNext = nullptr,
+                    .dependencyFlags = 0,
+                    .bufferMemoryBarrierCount = 1,
+                    .pBufferMemoryBarriers = &barrier,
+            };
+
+            vkCmdPipelineBarrier2(cmd, &depInfo);
+
+            submitImmediate(cmd);
+
+            destroyBuffer(stagingBufferHandle);
+        }
+
         if (!ci.name.empty()) {
             setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, "Buffer " + ci.name);
         }
@@ -1268,8 +1322,6 @@ namespace Flare {
 
         Texture *texture = textures.get(handle);
 
-        uint32_t mipLevel = VkHelper::getMipLevel(ci.width, ci.height);
-
         texture->width = ci.width;
         texture->height = ci.height;
         texture->depth = ci.depth;
@@ -1277,22 +1329,32 @@ namespace Flare {
         texture->name = ci.name;
         texture->handle = handle;
         if (ci.genMips) {
-            texture->mipLevel = mipLevel;
+            texture->mipLevel = VkHelper::getMipLevel(ci.width, ci.height);
         } else {
             texture->mipLevel = 1;
         }
+        if (ci.cubemap) {
+            texture->layerCount = 6;
+        } else {
+            texture->layerCount = 1;
+        }
 
         VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+
         if (ci.format == VK_FORMAT_D32_SFLOAT) {
             usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         } else {
             usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         }
 
+        if (ci.offscreenDraw) {
+            usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        }
+
         VkImageCreateInfo imageCI = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                 .pNext = nullptr,
-                .flags = 0,
+                .flags = static_cast<VkImageCreateFlags>(ci.cubemap ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0),
                 .imageType = ci.type,
                 .format = ci.format,
                 .extent = {
@@ -1300,8 +1362,8 @@ namespace Flare {
                         .height = ci.height,
                         .depth = ci.depth,
                 },
-                .mipLevels = ci.genMips ? mipLevel : 1,
-                .arrayLayers = ci.layerCount,
+                .mipLevels = ci.genMips ? texture->mipLevel : 1,
+                .arrayLayers = static_cast<uint32_t>(ci.cubemap ? 6 : 1),
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .tiling = VK_IMAGE_TILING_OPTIMAL,
                 .usage = usage,
@@ -1326,7 +1388,15 @@ namespace Flare {
                 .viewType = ci.viewType,
                 .format = ci.format,
                 .components = VkHelper::identityRGBA(),
-                .subresourceRange = VkHelper::subresourceRange(ci.format == VK_FORMAT_D32_SFLOAT),
+                .subresourceRange = {
+                        .aspectMask = static_cast<VkImageAspectFlags>(ci.format == VK_FORMAT_D32_SFLOAT
+                                                                      ? VK_IMAGE_ASPECT_DEPTH_BIT
+                                                                      : VK_IMAGE_ASPECT_COLOR_BIT),
+                        .baseMipLevel = 0,
+                        .levelCount = texture->mipLevel,
+                        .baseArrayLayer = 0,
+                        .layerCount = static_cast<uint32_t>(ci.cubemap ? 6 : 1),
+                }
         };
 
         vkCreateImageView(device, &imageViewCI, nullptr, &texture->imageView);
@@ -1335,7 +1405,7 @@ namespace Flare {
         }
 
         if (ci.initialData) {
-            uploadTextureData(handle, {ci.width, ci.height, ci.depth}, ci.initialData);
+            uploadTextureData(texture, ci.initialData, ci.genMips);
         }
 
         VkDescriptorImageInfo imageInfo = {
@@ -1614,7 +1684,6 @@ namespace Flare {
                 .width = 1,
                 .height = 1,
                 .depth = 1,
-                .layerCount = 1,
                 .format = VK_FORMAT_R8G8B8A8_UNORM,
                 .type = VK_IMAGE_TYPE_2D,
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
@@ -1650,10 +1719,8 @@ namespace Flare {
         destroyPipeline(recreatedHandle); // destroy old pipeline
     }
 
-    void GpuDevice::uploadTextureData(Handle<Texture> handle, VkExtent3D extent, void *data, bool genMips) {
-        Texture *texture = getTexture(handle);
-
-        size_t size = extent.width * extent.height * extent.depth * 4;
+    void GpuDevice::uploadTextureData(Texture *texture, void *data, bool genMips) {
+        size_t size = texture->width * texture->height * texture->depth * 4;
 
         BufferCI stagingBufferCI = {
                 .size = size,
@@ -1682,7 +1749,7 @@ namespace Flare {
                         .layerCount = 1,
                 },
                 .imageOffset = {0, 0, 0},
-                .imageExtent = extent,
+                .imageExtent = {texture->width, texture->height, texture->depth},
         };
 
         VkCopyBufferToImageInfo2 copyInfo = {

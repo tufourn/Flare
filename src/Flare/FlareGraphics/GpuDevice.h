@@ -24,10 +24,6 @@ namespace Flare {
     static constexpr uint32_t ACCEL_STRUCT_SET = 5;
     static constexpr uint32_t SET_COUNT = 6;
 
-    struct PushConstants {
-        uint32_t uniformOffset;
-    };
-
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
         uint32_t buffers = 256;
@@ -102,7 +98,7 @@ namespace Flare {
 
         Handle<Texture> createTexture(const TextureCI &ci);
 
-        void uploadTextureData(Handle<Texture> handle, VkExtent3D extent, void *data, bool genMips = true);
+        void uploadTextureData(Texture *texture, void *data, bool genMips);
 
         void destroyTexture(Handle<Texture> handle);
 

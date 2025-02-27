@@ -183,6 +183,10 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/Passes/ShadowPass.h
         src/Flare/FlareGraphics/Passes/FrustumCullPass.cpp
         src/Flare/FlareGraphics/Passes/FrustumCullPass.h
+        src/Flare/FlareGraphics/Passes/SkyboxPass.cpp
+        src/Flare/FlareGraphics/Passes/SkyboxPass.h
+        src/Flare/FlareGraphics/BasicGeometry.cpp
+        src/Flare/FlareGraphics/BasicGeometry.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal
