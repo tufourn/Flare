@@ -5,8 +5,7 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "CoreShaders/BindlessCommon.glsl"
-
-#define PI 3.14159265
+#include "CoreShaders/SrgbToLinear.glsl"
 
 layout (location = 0) in vec3 inFragPos;
 layout (location = 1) in vec2 inUV;
@@ -50,27 +49,50 @@ struct Globals {
     uint cubemapSamplerIndex;
 };
 
+struct PbrInfo {
+    float NoL;
+    float NoV;
+    float NoH;
+    float LoH;
+    float VoH;
+    float perceptualRoughness;
+    float metalness;
+    vec3 reflectance0;
+    vec3 reflectance90;
+    float alphaRoughness;
+    vec3 diffuseColor;
+    vec3 specularColor;
+};
+
 layout (set = 0, binding = 0) uniform U { Globals globals; } globalBuffer[];
-
-float D_GGX(float NoH, float a) {
-    float a2 = a * a;
-    float f = (NoH * a2 - NoH) * NoH + 1.0;
-    return a2 / (PI * f * f);
-}
-
-vec3 F_Schlick(float u, vec3 f0) {
-    return f0 + (vec3(1.0) - f0) * pow(1.0 - u, 5.0);
-}
-
-float V_SmithGGXCorrelated(float NoV, float NoL, float a) {
-    float a2 = a * a;
-    float GGXL = NoV * sqrt((-NoL * a2 + NoL) * NoL + a2);
-    float GGXV = NoL * sqrt((-NoV * a2 + NoV) * NoV + a2);
-    return 0.5 / (GGXV + GGXL);
-}
 
 float Fd_Lambert() {
     return 1.0 / PI;
+}
+
+vec3 diffuse(PbrInfo pbrInfo) {
+    return pbrInfo.diffuseColor / PI;
+}
+
+vec3 specularReflection(PbrInfo pbrInfo) {
+    return pbrInfo.reflectance0 + (pbrInfo.reflectance90 - pbrInfo.reflectance0) * pow(clamp(1.0 - pbrInfo.VoH, 0.0, 1.0), 5.0);
+}
+
+float geometricOcclusion(PbrInfo pbrInfo)
+{
+    float NoL = pbrInfo.NoL;
+    float NoV = pbrInfo.NoV;
+    float r = pbrInfo.alphaRoughness;
+
+    float attenuationL = 2.0 * NoL / (NoL + sqrt(r * r + (1.0 - r * r) * (NoL * NoL)));
+    float attenuationV = 2.0 * NoV / (NoV + sqrt(r * r + (1.0 - r * r) * (NoV * NoV)));
+    return attenuationL * attenuationV;
+}
+
+float microfacetDistribution(PbrInfo pbrInfo) {
+    float roughnessSq = pbrInfo.alphaRoughness * pbrInfo.alphaRoughness;
+    float f = (pbrInfo.NoH * roughnessSq - pbrInfo.NoH) * pbrInfo.NoH + 1.0;
+    return roughnessSq / (PI * f * f);
 }
 
 float shadowCalculation(vec4 fragPosLightSpace, vec2 off, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
@@ -84,6 +106,31 @@ float shadowCalculation(vec4 fragPosLightSpace, vec2 off, uint shadowDepthTextur
         }
     }
     return shadow;
+}
+
+float lodFromRoughness(float perceptualRoughness) {
+    const float MAX_LOD = 10.0;// cube res is 1024
+    return perceptualRoughness * MAX_LOD;
+}
+
+vec3 getIblContribution(PbrInfo pbrInfo, vec3 N, vec3 reflection) {
+    Globals glob = globalBuffer[pc.uniformOffset].globals;
+
+    float lod = lodFromRoughness(pbrInfo.perceptualRoughness);
+
+    vec3 brdf = texture(sampler2D(globalTextures[glob.brdfLutIndex],
+    globalSamplers[0]), vec2(pbrInfo.NoV, 1.0 - pbrInfo.perceptualRoughness)).rgb;
+
+    vec3 diffuseLight = srgbToLinear(texture(samplerCube(cubemapTextures[glob.irradianceMapIndex],
+    globalSamplers[glob.cubemapSamplerIndex]), N)).rgb;
+
+    vec3 specularLight = srgbToLinear(textureLod(samplerCube(cubemapTextures[glob.prefilteredCubeIndex],
+    globalSamplers[glob.cubemapSamplerIndex]), reflection, lod)).rgb;
+
+    vec3 diffuse = diffuseLight * pbrInfo.diffuseColor;
+    vec3 specular = specularLight * (pbrInfo.specularColor * brdf.x + brdf.y);
+
+    return diffuse + specular;
 }
 
 float filterPCF(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
@@ -107,17 +154,6 @@ float filterPCF(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shado
     return shadowFactor / count;
 }
 
-float lodFromRoughness(float roughness) {
-    const float MAX_LOD = 10.0;// cube res is 1024
-    return roughness * MAX_LOD;
-}
-
-// learnopengl
-vec3 fresnelSchlickRoughness(float NoV, vec3 f0, float roughness)
-{
-    return f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(clamp(1.0 - NoV, 0.0, 1.0), 5.0);
-}
-
 void main() {
     Globals glob = globalBuffer[pc.uniformOffset].globals;
     IndirectDrawData dd = indirectDrawDataAlias[glob.indirectDrawDataBufferIndex].indirectDrawDatas[inDrawID];
@@ -129,10 +165,10 @@ void main() {
     Material mat = materialAlias[glob.materialBufferIndex].materials[dd.materialOffset];
 
     TextureIndex albedoIndex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.albedoTextureOffset];
-    vec4 albedo = texture(sampler2D(globalTextures[nonuniformEXT(albedoIndex.textureIndex)],
-    globalSamplers[nonuniformEXT(albedoIndex.samplerIndex)]), inUV);
+    vec4 albedo = srgbToLinear(texture(sampler2D(globalTextures[nonuniformEXT(albedoIndex.textureIndex)],
+    globalSamplers[nonuniformEXT(albedoIndex.samplerIndex)]), inUV)) * mat.albedoFactor;
 
-    if (albedo.a < 0.01) {
+    if (albedo.a < 0.5) {
         discard;
     }
 
@@ -145,60 +181,63 @@ void main() {
     globalSamplers[nonuniformEXT(metallicRoughnessTex.samplerIndex)]), inUV);
 
     // green channel for roughness, clamped to 0.089 to avoid division by 0
-    float perceivedRoughness = clamp(mat.roughnessFactor * metallicRoughness.g, 0.089, 1.0);
-    float roughness = perceivedRoughness * perceivedRoughness;
+    float perceptualRoughness = clamp(mat.roughnessFactor * metallicRoughness.g, 0.089, 1.0);
+    float alphaRoughness = perceptualRoughness * perceptualRoughness;
 
     // blue channel for metallic
-    float metallic = mat.metallicFactor * metallicRoughness.b;
+    float metalness = mat.metallicFactor * metallicRoughness.b;
 
-    // default reflectance values per filament doc
-    float reflectance = 0.04;
-    vec3 f0 = 0.16 * reflectance * reflectance * (1.0 - metallic) + albedo.rgb * metallic;
+    vec3 f0 = vec3(0.04);
 
-    vec3 diffuseColor = (1.0 - metallic) * albedo.rgb;
+    vec3 diffuseColor = (1.0 - metalness) * (albedo.rgb * (vec3(1.0) - f0));
+    vec3 specularColor = mix(f0, albedo.rgb, metalness);
+
+    float reflectance = max(max(specularColor.r, specularColor.g), specularColor.b);
+
+    float reflectance90 = clamp(reflectance * 25.0, 0.0, 1.0);
+    vec3 specularEnvironmentR0 = specularColor.rgb;
+    vec3 specularEnvironmentR90 = vec3(1.0) * reflectance90;
 
     vec3 N = normalize(inTBN * (normal * 2.0 - 1.0));
     vec3 L = normalize(lightPos - inFragPos);
     vec3 V = normalize(glob.cameraPos.xyz - inFragPos);
     vec3 H = normalize(L + V);
 
-    float NoV = abs(dot(N, V) + 1e-5);
-    float NoL = clamp(dot(N, L), 0.0, 1.0);
+    vec3 reflection = normalize(reflect(-V, N));
+    reflection.y *= -1;
+
+    float NoV = clamp(abs(dot(N, V)), 0.001, 1.0);
+    float NoL = clamp(dot(N, L), 0.001, 1.0);
     float NoH = clamp(dot(N, H), 0.0, 1.0);
     float LoH = clamp(dot(L, H), 0.0, 1.0);
+    float VoH = clamp(dot(V, H), 0.0, 1.0);
 
-    //    float D = D_GGX(NoH, roughness);
-    //    vec3 F = F_Schlick(LoH, f0);
-    //    float specularV = V_SmithGGXCorrelated(NoV, NoL, roughness);
-    //
-    //    vec3 Fr = (D * specularV) * F;
-    //    vec3 Fd = diffuseColor * Fd_Lambert();
-    //
-    //    vec3 diffuse = Fd * (1 - F) * lightColor * lightIntensity * NoL;// Diffuse lighting
-    //    vec3 specular = Fr * lightColor * lightIntensity * NoL;// Specular lighting
+    PbrInfo pbrInfo = PbrInfo(
+    NoL,
+    NoV,
+    NoH,
+    LoH,
+    VoH,
+    perceptualRoughness,
+    metalness,
+    specularEnvironmentR0,
+    specularEnvironmentR90,
+    alphaRoughness,
+    diffuseColor,
+    specularColor
+    );
 
-    vec3 kS = fresnelSchlickRoughness(NoV, f0, roughness);
-    vec3 kD = 1.0 - kS;
-    kD *= 1.0 - metallic;
+    vec3 F = specularReflection(pbrInfo);
+    float G = geometricOcclusion(pbrInfo);
+    float D = microfacetDistribution(pbrInfo);
 
-    vec3 irradiance = texture(samplerCube(cubemapTextures[glob.irradianceMapIndex],
-    globalSamplers[glob.cubemapSamplerIndex]), N).rgb * NoL;
-
-    vec3 r = reflect(-V, N);
-    r.y *= -1;
-    vec3 prefilteredColor = textureLod(samplerCube(cubemapTextures[glob.prefilteredCubeIndex],
-    globalSamplers[glob.cubemapSamplerIndex]), r, lodFromRoughness(roughness)).rgb;
-
-    vec2 envBrdf = texture(sampler2D(globalTextures[glob.brdfLutIndex], globalSamplers[0]), vec2(NoV, roughness)).xy;
-
-    vec3 diffuse = irradiance * diffuseColor;
-    vec3 specular = prefilteredColor * (kS * envBrdf.x + envBrdf.y);
+    vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInfo);
+    vec3 specularContrib = F * G * D / (4.0 * NoL * NoV);
 
     float shadow = filterPCF(inFragLightSpace, glob.shadowDepthTextureIndex, glob.shadowSamplerIndex);
-    vec3 finalColor = (kD * diffuse + specular) * shadow;
-    //    vec3 finalColor = (diffuse + specular);
+    vec3 color = NoL * lightIntensity * lightColor * (diffuseContrib + specularContrib) * shadow;
 
-    outColor = vec4(finalColor, 1.0);
-    //    float lod = textureQueryLod(sampler2D(globalTextures[albedoIndex.textureIndex], globalSamplers[albedoIndex.samplerIndex]), inUV).x;
-    //    outColor += vec4(0.2, 0.0, 0.0, 0.0) * lod;
+    color += getIblContribution(pbrInfo, N, reflection);
+
+    outColor = vec4(color, 1.0);
 }

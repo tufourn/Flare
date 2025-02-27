@@ -586,7 +586,7 @@ int main() {
     appConfig
             .setWidth(1280)
             .setHeight(720)
-            .setName("Triangle");
+            .setName("Vulkan");
 
     TriangleApp app;
     app.run(appConfig);
