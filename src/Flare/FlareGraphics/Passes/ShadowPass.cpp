@@ -9,8 +9,8 @@ namespace Flare {
         gpu = gpuDevice;
 
         TextureCI textureCI = {
-                .width = gpu->swapchainExtent.width * SHADOW_RESOLUTION_MULTIPLIER,
-                .height = gpu->swapchainExtent.height * SHADOW_RESOLUTION_MULTIPLIER,
+                .width = SHADOW_RESOLUTION,
+                .height = SHADOW_RESOLUTION,
                 .depth = 1,
                 .layerCount = 1,
                 .format = VK_FORMAT_D32_SFLOAT,

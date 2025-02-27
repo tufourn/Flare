@@ -7,7 +7,7 @@ namespace Flare {
     struct GpuDevice;
     struct AsyncLoader;
 
-    static constexpr uint32_t SHADOW_RESOLUTION_MULTIPLIER = 4; // render shadows at 4x resolution of swapchain image
+    static constexpr uint32_t SHADOW_RESOLUTION = 2048;
 
     struct ShadowUniform {
         glm::mat4 lightSpaceMatrix;

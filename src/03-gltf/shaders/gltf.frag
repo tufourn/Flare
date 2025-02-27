@@ -1,6 +1,7 @@
 #version 460
 
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_samplerless_texture_functions : enable
 #extension GL_GOOGLE_include_directive : enable
 
 #include "CoreShaders/BindlessCommon.glsl"
@@ -66,17 +67,38 @@ float Fd_Lambert() {
     return 1.0 / PI;
 }
 
-float shadowCalculation(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
+float shadowCalculation(vec4 fragPosLightSpace, vec2 off, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
     float shadow = 1.0;
     if (fragPosLightSpace.z > -1.0 && fragPosLightSpace.z < 1.0) {
         float dist = texture(sampler2D(globalTextures[nonuniformEXT(shadowDepthTextureIndex)],
-        globalSamplers[shadowSamplerIndex]), fragPosLightSpace.xy).r;
+        globalSamplers[shadowSamplerIndex]), fragPosLightSpace.xy + off).r;
 
         if (fragPosLightSpace.w > 0.0 && dist < fragPosLightSpace.z) {
             shadow = 0.1;
         }
     }
     return shadow;
+}
+
+float filterPCF(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
+    ivec2 texDim = textureSize(globalTextures[nonuniformEXT(shadowDepthTextureIndex)], 0);
+
+    float scale = 1.5;
+    float dx = scale * 1.0 / float(texDim.x);
+    float dy = scale * 1.0 / float(texDim.y);
+
+    float shadowFactor = 0.0;
+    int count = 0;
+    int range = 1;
+
+    for (int x = -range; x <= range; x++) {
+        for (int y = -range; y <= range; y++) {
+            shadowFactor += shadowCalculation(fragPosLightSpace, vec2(dx*x, dy*y), shadowDepthTextureIndex, shadowSamplerIndex);
+            count++;
+        }
+    }
+
+    return shadowFactor / count;
 }
 
 void main() {
@@ -138,11 +160,11 @@ void main() {
     vec3 diffuse = Fd * (1 - F) * lightColor * lightIntensity * NoL;// Diffuse lighting
     vec3 specular = Fr * lightColor * lightIntensity * NoL;// Specular lighting
 
-    float shadow = shadowCalculation(inFragLightSpace, glob.shadowDepthTextureIndex, glob.shadowSamplerIndex);
+    float shadow = filterPCF(inFragLightSpace, glob.shadowDepthTextureIndex, glob.shadowSamplerIndex);
     vec3 finalColor = (diffuse + specular) * shadow;
     //    vec3 finalColor = (diffuse + specular);
 
     outColor = vec4(finalColor, 1.0);
-//    float lod = textureQueryLod(sampler2D(globalTextures[albedoIndex.textureIndex], globalSamplers[albedoIndex.samplerIndex]), inUV).x;
-//    outColor += vec4(0.2, 0.0, 0.0, 0.0) * lod;
+    //    float lod = textureQueryLod(sampler2D(globalTextures[albedoIndex.textureIndex], globalSamplers[albedoIndex.samplerIndex]), inUV).x;
+    //    outColor += vec4(0.2, 0.0, 0.0, 0.0) * lod;
 }

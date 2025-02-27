@@ -273,6 +273,31 @@ struct TriangleApp : Application {
                 camera.update();
                 camera.setAspectRatio((float) window.width / window.height);
 
+                for (size_t i = 0; i < gltf.meshDraws.size(); i++) {
+                    const MeshDraw &md = gltf.meshDraws[i];
+
+                    indirectDrawDatas[i] = {
+                            .cmd = {
+                                    .indexCount = md.indexCount,
+                                    .instanceCount = 1,
+                                    .firstIndex = md.indexOffset,
+                                    .vertexOffset = static_cast<int32_t>(md.vertexOffset),
+                                    .firstInstance = 0,
+                            },
+                            .meshId = md.id,
+                            .materialOffset = md.materialOffset,
+                            .transformOffset = md.transformOffset,
+                    };
+
+                    bounds[i] = md.bounds;
+                }
+
+                memcpy(gpu.getBuffer(indirectDrawDataBufferHandle)->allocationInfo.pMappedData,
+                       indirectDrawDatas.data(),
+                       sizeof(IndirectDrawData) * indirectDrawDatas.size());
+                memcpy(gpu.getBuffer(boundsBufferHandle)->allocationInfo.pMappedData, bounds.data(),
+                       sizeof(Bounds) * bounds.size());
+
                 float nearPlane = 1.f;
                 float farPlane = 100.f;
                 glm::mat4 lightView = glm::lookAt(globals.light.position, glm::vec3(0.f, 0.f, 0.f),
@@ -317,31 +342,6 @@ struct TriangleApp : Application {
                 PushConstants pc = {
                         .uniformOffset = globalsRingBuffer.buffer().index,
                 };
-
-                for (size_t i = 0; i < gltf.meshDraws.size(); i++) {
-                    const MeshDraw &md = gltf.meshDraws[i];
-
-                    indirectDrawDatas[i] = {
-                            .cmd = {
-                                    .indexCount = md.indexCount,
-                                    .instanceCount = 1,
-                                    .firstIndex = md.indexOffset,
-                                    .vertexOffset = static_cast<int32_t>(md.vertexOffset),
-                                    .firstInstance = 0,
-                            },
-                            .meshId = md.id,
-                            .materialOffset = md.materialOffset,
-                            .transformOffset = md.transformOffset,
-                    };
-
-                    bounds[i] = md.bounds;
-                }
-
-                memcpy(gpu.getBuffer(indirectDrawDataBufferHandle)->allocationInfo.pMappedData,
-                       indirectDrawDatas.data(),
-                       sizeof(IndirectDrawData) * indirectDrawDatas.size());
-                memcpy(gpu.getBuffer(boundsBufferHandle)->allocationInfo.pMappedData, bounds.data(),
-                       sizeof(Bounds) * bounds.size());
 
                 gpu.newFrame();
                 imgui.newFrame();
@@ -481,6 +481,7 @@ struct TriangleApp : Application {
                 if (shouldReloadPipeline) {
                     gpu.recreatePipeline(pipelineHandle, pipelineCI);
                     gpu.recreatePipeline(frustumCullPass.pipelineHandle, frustumCullPass.pipelineCI);
+                    gpu.recreatePipeline(shadowPass.pipelineHandle, shadowPass.pipelineCI);
                     shouldReloadPipeline = false;
                 }
             }
