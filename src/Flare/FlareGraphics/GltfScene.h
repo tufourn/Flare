@@ -38,15 +38,17 @@ namespace Flare {
     struct Material {
         glm::vec4 albedoFactor;
 
+        glm::vec3 emissiveFactor;
+        uint32_t emissiveTextureOffset = 0;
+
         uint32_t albedoTextureOffset = 0;
         uint32_t metallicRoughnessTextureOffset = 0;
         uint32_t normalTextureOffset = 0;
         uint32_t occlusionTextureOffset = 0;
 
-        uint32_t emissiveTextureOffset = 0;
         float metallicFactor = 1.f;
         float roughnessFactor = 1.f;
-        float pad;
+        float pad[2];
     };
 
     struct GltfMeshPrimitive {

@@ -13,10 +13,11 @@ layout (push_constant) uniform PushConstants {
 
 // Textures and samplers
 layout (set = 2, binding = 0) uniform texture2D globalTextures[];
-layout (set = 2, binding = 0) uniform textureCube cubemapTextures[];
-
 layout (set = 3, binding = 0) uniform writeonly image2D globalStorageImages[];
 layout (set = 4, binding = 0) uniform sampler globalSamplers[];
+
+#define GET_TEXTURE(textureIndex, samplerIndex, uv) \
+texture(sampler2D(globalTextures[textureIndex], globalSamplers[samplerIndex]), uv)
 
 // Aliased SSBOs
 layout (set = 1, binding = 0) readonly buffer PositionBuffer {
@@ -50,15 +51,17 @@ layout(set = 1, binding = 0) readonly buffer TextureIndexBuffer {
 struct Material {
     vec4 albedoFactor;
 
+    vec3 emissiveFactor;
+    uint emissiveTextureOffset;
+
     uint albedoTextureOffset;
     uint metallicRoughnessTextureOffset;
     uint normalTextureOffset;
     uint occlusionTextureOffset;
 
-    uint emissiveTextureOffset;
     float metallicFactor;
     float roughnessFactor;
-    float pad;
+    float pad[2];
 };
 layout(set = 1, binding = 0) readonly buffer MaterialBuffer {
     Material materials[];

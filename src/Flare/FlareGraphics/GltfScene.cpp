@@ -187,11 +187,15 @@ namespace Flare {
 
         defaultMaterial = {
                 .albedoFactor = {1.0, 1.0, 1.0, 1.0},
+
+                .emissiveFactor = {0.0, 0.0, 0.0},
+                .emissiveTextureOffset = defaultEmissiveOffset,
+
                 .albedoTextureOffset = defaultAlbedoOffset,
                 .metallicRoughnessTextureOffset = defaultMetallicRoughnessOffset,
                 .normalTextureOffset = defaultNormalOffset,
                 .occlusionTextureOffset = defaultOcclusionOffset,
-                .emissiveTextureOffset = defaultEmissiveOffset,
+
                 .metallicFactor = 1.f,
                 .roughnessFactor = 1.f,
         };
@@ -234,8 +238,11 @@ namespace Flare {
 
             if (material.emissive_texture.texture) {
                 materials[i].emissiveTextureOffset = material.emissive_texture.texture - data->textures;
+
+                materials[i].emissiveFactor = glm::make_vec3(material.emissive_factor);
             } else {
                 materials[i].emissiveTextureOffset = defaultMaterial.emissiveTextureOffset;
+                materials[i].emissiveFactor = {0.f, 0.f, 0.f};
             }
         }
 

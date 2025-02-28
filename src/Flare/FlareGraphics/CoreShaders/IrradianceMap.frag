@@ -4,6 +4,7 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "CoreShaders/BindlessCommon.glsl"
+#include "CoreShaders/CubemapCommon.glsl"
 
 layout (location = 0) in vec3 inUVW;
 
@@ -28,8 +29,7 @@ void main() {
             // tangent space to world
             vec3 sampleVec = tangentSample.x * right + tangentSample.y * up + tangentSample.z * normal;
 
-            irradiance += texture(samplerCube(cubemapTextures[pc.data0], globalSamplers[pc.data1]), sampleVec).rgb *
-            cos(theta) * sin(theta);
+            irradiance += GET_CUBEMAP(pc.data0, pc.data1, sampleVec).rgb * cos(theta) * sin(theta);
 
             nrSamples++;
         }

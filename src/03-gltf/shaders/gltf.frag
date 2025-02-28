@@ -6,6 +6,7 @@
 
 #include "CoreShaders/BindlessCommon.glsl"
 #include "CoreShaders/SrgbToLinear.glsl"
+#include "CoreShaders/CubemapCommon.glsl"
 
 layout (location = 0) in vec3 inFragPos;
 layout (location = 1) in vec2 inUV;
@@ -66,10 +67,6 @@ struct PbrInfo {
 
 layout (set = 0, binding = 0) uniform U { Globals globals; } globalBuffer[];
 
-float Fd_Lambert() {
-    return 1.0 / PI;
-}
-
 vec3 diffuse(PbrInfo pbrInfo) {
     return pbrInfo.diffuseColor / PI;
 }
@@ -113,19 +110,14 @@ float lodFromRoughness(float perceptualRoughness) {
     return perceptualRoughness * MAX_LOD;
 }
 
-vec3 getIblContribution(PbrInfo pbrInfo, vec3 N, vec3 reflection) {
+vec3 getIblContribution(PbrInfo pbrInfo, vec3 N, vec3 R) {
     Globals glob = globalBuffer[pc.uniformOffset].globals;
 
     float lod = lodFromRoughness(pbrInfo.perceptualRoughness);
+    vec3 brdf = GET_TEXTURE(glob.brdfLutIndex, 0, vec2(pbrInfo.NoV, 1.0 - pbrInfo.perceptualRoughness)).rgb;
 
-    vec3 brdf = texture(sampler2D(globalTextures[glob.brdfLutIndex],
-    globalSamplers[0]), vec2(pbrInfo.NoV, 1.0 - pbrInfo.perceptualRoughness)).rgb;
-
-    vec3 diffuseLight = srgbToLinear(texture(samplerCube(cubemapTextures[glob.irradianceMapIndex],
-    globalSamplers[glob.cubemapSamplerIndex]), N)).rgb;
-
-    vec3 specularLight = srgbToLinear(textureLod(samplerCube(cubemapTextures[glob.prefilteredCubeIndex],
-    globalSamplers[glob.cubemapSamplerIndex]), reflection, lod)).rgb;
+    vec3 diffuseLight = srgbToLinear(GET_CUBEMAP(glob.irradianceMapIndex, glob.cubemapSamplerIndex, N)).rgb;
+    vec3 specularLight = srgbToLinear(GET_CUBEMAP_LOD(glob.prefilteredCubeIndex, glob.cubemapSamplerIndex, R, lod)).rgb;
 
     vec3 diffuse = diffuseLight * pbrInfo.diffuseColor;
     vec3 specular = specularLight * (pbrInfo.specularColor * brdf.x + brdf.y);
@@ -164,21 +156,25 @@ void main() {
 
     Material mat = materialAlias[glob.materialBufferIndex].materials[dd.materialOffset];
 
-    TextureIndex albedoIndex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.albedoTextureOffset];
-    vec4 albedo = srgbToLinear(texture(sampler2D(globalTextures[nonuniformEXT(albedoIndex.textureIndex)],
-    globalSamplers[nonuniformEXT(albedoIndex.samplerIndex)]), inUV)) * mat.albedoFactor;
+    TextureIndex albedoTex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.albedoTextureOffset];
+    vec4 albedo = srgbToLinear(GET_TEXTURE(albedoTex.textureIndex, albedoTex.samplerIndex, inUV)) * mat.albedoFactor;
 
     if (albedo.a < 0.5) {
         discard;
     }
 
     TextureIndex normalTex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.normalTextureOffset];
-    vec3 normal = texture(sampler2D(globalTextures[nonuniformEXT(normalTex.textureIndex)],
-    globalSamplers[nonuniformEXT(normalTex.samplerIndex)]), inUV).rgb;
+    vec3 normal = GET_TEXTURE(normalTex.textureIndex, normalTex.samplerIndex, inUV).rgb;
 
     TextureIndex metallicRoughnessTex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.metallicRoughnessTextureOffset];
-    vec4 metallicRoughness = texture(sampler2D(globalTextures[nonuniformEXT(metallicRoughnessTex.textureIndex)],
-    globalSamplers[nonuniformEXT(metallicRoughnessTex.samplerIndex)]), inUV);
+    vec4 metallicRoughness = GET_TEXTURE(metallicRoughnessTex.textureIndex, metallicRoughnessTex.samplerIndex, inUV);
+
+    vec3 emissive = mat.emissiveFactor;
+    TextureIndex emissiveTex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.emissiveTextureOffset];
+    emissive *= srgbToLinear(GET_TEXTURE(emissiveTex.textureIndex, emissiveTex.samplerIndex, inUV)).rgb;
+
+    TextureIndex aoTex = textureIndexAlias[glob.textureBufferIndex].textureIndices[mat.occlusionTextureOffset];
+    float ao = GET_TEXTURE(aoTex.textureIndex, aoTex.samplerIndex, inUV).r;
 
     // green channel for roughness, clamped to 0.089 to avoid division by 0
     float perceptualRoughness = clamp(mat.roughnessFactor * metallicRoughness.g, 0.089, 1.0);
@@ -238,6 +234,11 @@ void main() {
     vec3 color = NoL * lightIntensity * lightColor * (diffuseContrib + specularContrib) * shadow;
 
     color += getIblContribution(pbrInfo, N, reflection);
+
+    const float occlusionStrength = 1.0;
+    color = mix(color, color * ao, occlusionStrength);
+
+    color += emissive;
 
     outColor = vec4(color, 1.0);
 }

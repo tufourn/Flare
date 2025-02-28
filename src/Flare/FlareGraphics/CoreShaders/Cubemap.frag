@@ -20,7 +20,7 @@ vec2 sampleSphericalMap(vec3 v)
 
 void main() {
     vec2 uv = sampleSphericalMap(normalize(inUVW));
-    vec3 color = texture(sampler2D(globalTextures[pc.data0], globalSamplers[pc.data1]), uv).rgb;
+    vec3 color = GET_TEXTURE(pc.data0, pc.data1, uv).rgb;
 
     outColor = vec4(color, 1.0);
 }

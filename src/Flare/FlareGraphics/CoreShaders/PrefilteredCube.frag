@@ -4,6 +4,7 @@
 #extension GL_GOOGLE_include_directive : enable
 
 #include "CoreShaders/BindlessCommon.glsl"
+#include "CoreShaders/CubemapCommon.glsl"
 
 layout (location = 0) in vec3 inUVW;
 
@@ -66,7 +67,7 @@ void main() {
         float NdotL = max(dot(N, L), 0.0);
         if (NdotL > 0.0)
         {
-            prefilteredColor += texture(samplerCube(cubemapTextures[pc.data0], globalSamplers[pc.data1]), L).rgb * NdotL;
+            prefilteredColor += GET_CUBEMAP(pc.data0, pc.data1, L).rgb * NdotL;
             totalWeight      += NdotL;
         }
     }
