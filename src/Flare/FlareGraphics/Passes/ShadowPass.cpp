@@ -88,28 +88,11 @@ namespace Flare {
         VkHelper::transitionImage(cmd, texture->image,
                                   VK_IMAGE_LAYOUT_UNDEFINED,
                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        VkRenderingAttachmentInfo depthAttachment = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                .pNext = nullptr,
-                .imageView = texture->imageView,
-                .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .clearValue = {
-                        .depthStencil = {
-                                .depth = 1.f,
-                        }
-                }
-        };
 
-        VkRenderingInfo renderingInfo = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                .flags = 0,
-                .renderArea = {VkOffset2D{0, 0}, {texture->width, texture->height}},
-                .layerCount = 1,
-                .viewMask = 0,
-                .pDepthAttachment = &depthAttachment,
-        };
+        VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(texture->imageView);
+
+        VkRenderingInfo renderingInfo = VkHelper::renderingInfo(texture->width, texture->height, 0, nullptr,
+                                                                &depthAttachment);
 
         vkCmdBeginRendering(cmd, &renderingInfo);
 
@@ -120,20 +103,11 @@ namespace Flare {
             vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
                                     gpu->bindlessDescriptorSets.size(), gpu->bindlessDescriptorSets.data(),
                                     0, nullptr);
-            VkViewport viewport = {
-                    .x = 0.f,
-                    .y = 0.f,
-                    .width = static_cast<float>(texture->width),
-                    .height = static_cast<float>(texture->height),
-                    .minDepth = 0.f,
-                    .maxDepth = 1.f,
-            };
+
+            VkViewport viewport = VkHelper::viewport(texture->width, texture->height);
             vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-            VkRect2D scissor = {
-                    .offset = {0, 0},
-                    .extent = {texture->width, texture->height},
-            };
+            VkRect2D scissor = VkHelper::scissor(texture->width, texture->height);
             vkCmdSetScissor(cmd, 0, 1, &scissor);
 
             vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pc);

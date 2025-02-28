@@ -1,5 +1,6 @@
 #include "FlareImgui.h"
 #include "GpuDevice.h"
+#include "VkHelper.h"
 
 #include <spdlog/spdlog.h>
 #include <imgui.h>
@@ -67,20 +68,10 @@ namespace Flare {
     }
 
     void FlareImgui::draw(VkCommandBuffer cmd, VkImageView target) {
-        VkRenderingAttachmentInfo colorAttachment = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                .imageView = target,
-                .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        };
-        VkRenderingInfo renderInfo = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                .renderArea = VkRect2D{VkOffset2D{0, 0}, gpu->swapchainExtent},
-                .layerCount = 1,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &colorAttachment,
-        };
+        VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(target,
+                                                                              VK_ATTACHMENT_LOAD_OP_LOAD,
+                                                                              VK_ATTACHMENT_STORE_OP_STORE);
+        VkRenderingInfo renderInfo = VkHelper::renderingInfo(gpu->swapchainExtent, 1, &colorAttachment);
 
         vkCmdBeginRendering(cmd, &renderInfo);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);

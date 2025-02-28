@@ -74,9 +74,9 @@ struct TriangleApp : Application {
 
 //        gltf.init("assets/BoxTextured.gltf", &gpu);
 //        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
-//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
+        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
-        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
+//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -329,67 +329,30 @@ struct TriangleApp : Application {
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-                VkRenderingAttachmentInfo colorAttachment = {
-                        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                        .pNext = nullptr,
-                        .imageView = gpu.swapchainImageViews[gpu.swapchainImageIndex],
-                        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                };
+                VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(
+                        gpu.swapchainImageViews[gpu.swapchainImageIndex]);
 
-                VkRenderingAttachmentInfo depthAttachment = {
-                        .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                        .pNext = nullptr,
-                        .imageView = gpu.textures.get(gpu.depthTextures[gpu.swapchainImageIndex])->imageView,
-                        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                        .clearValue = {
-                                .depthStencil = {
-                                        .depth = 1.f,
-                                },
-                        },
-                };
+                VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(
+                        gpu.getTexture(gpu.depthTextures[gpu.swapchainImageIndex])->imageView);
 
-                VkRenderingInfo renderingInfo = {
-                        .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                        .pNext = nullptr,
-                        .flags = 0,
-                        .renderArea = {VkOffset2D{0, 0}, gpu.swapchainExtent},
-                        .layerCount = 1,
-                        .viewMask = 0,
-                        .colorAttachmentCount = 1,
-                        .pColorAttachments = &colorAttachment,
-                        .pDepthAttachment = &depthAttachment,
-                        .pStencilAttachment = nullptr,
-                };
+                VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu.swapchainExtent, 1,
+                                                                        &colorAttachment,
+                                                                        &depthAttachment);
 
                 Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
 
                 vkCmdBeginRendering(cmd, &renderingInfo);
                 vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
 
-
                 vkCmdBindIndexBuffer(cmd, gpu.getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
                 vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
                                         gpu.bindlessDescriptorSets.size(), gpu.bindlessDescriptorSets.data(),
                                         0, nullptr);
 
-                VkViewport viewport = {
-                        .x = 0.f,
-                        .y = 0.f,
-                        .width = static_cast<float>(gpu.swapchainExtent.width),
-                        .height = static_cast<float>(gpu.swapchainExtent.height),
-                        .minDepth = 0.f,
-                        .maxDepth = 1.f,
-                };
+                VkViewport viewport = VkHelper::viewport(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
                 vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-                VkRect2D scissor = {
-                        .offset = {0, 0},
-                        .extent = gpu.swapchainExtent,
-                };
+                VkRect2D scissor = VkHelper::scissor(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
                 vkCmdSetScissor(cmd, 0, 1, &scissor);
 
                 vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),

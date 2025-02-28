@@ -223,23 +223,10 @@ namespace Flare {
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
         Texture *targetTexture = gpu->getTexture(targetHandle);
 
-        VkRenderingAttachmentInfo colorAttachment = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                .imageView = gpu->getTexture(offscreenImageHandle)->imageView,
-                .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        };
-        VkRenderingInfo renderInfo = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                .renderArea = {
-                        VkOffset2D{0, 0},
-                        {SKYBOX_RESOLUTION, SKYBOX_RESOLUTION}
-                },
-                .layerCount = 1,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &colorAttachment,
-        };
+        VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(
+                gpu->getTexture(offscreenImageHandle)->imageView);
+
+        VkRenderingInfo renderInfo = VkHelper::renderingInfo(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION, 1, &colorAttachment);
 
         VkViewport viewport = VkHelper::viewport(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
         VkRect2D scissor = VkHelper::scissor(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
@@ -312,28 +299,15 @@ namespace Flare {
     void SkyboxPass::getBrdfLut() {
         // todo: save and load brdf lut from file if exists
 
-        Pipeline* brdfLutPipeline = gpu->getPipeline(brdfLutPipelineHandle);
+        Pipeline *brdfLutPipeline = gpu->getPipeline(brdfLutPipelineHandle);
 
         VkViewport viewport = VkHelper::viewport(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
         VkRect2D scissor = VkHelper::scissor(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION);
 
-        VkRenderingAttachmentInfo colorAttachment = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-                .imageView = gpu->getTexture(offscreenImageHandle)->imageView,
-                .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        };
-        VkRenderingInfo renderInfo = {
-                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
-                .renderArea = {
-                        VkOffset2D{0, 0},
-                        {SKYBOX_RESOLUTION, SKYBOX_RESOLUTION}
-                },
-                .layerCount = 1,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &colorAttachment,
-        };
+        VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(
+                gpu->getTexture(offscreenImageHandle)->imageView);
+
+        VkRenderingInfo renderInfo = VkHelper::renderingInfo(SKYBOX_RESOLUTION, SKYBOX_RESOLUTION, 1, &colorAttachment);
 
         VkCommandBuffer cmd = gpu->getCommandBuffer();
 

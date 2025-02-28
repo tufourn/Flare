@@ -282,4 +282,73 @@ namespace VkHelper {
 
         transitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
+
+    VkRenderingAttachmentInfo depthAttachment(VkImageView imageView,
+                                              VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
+                                              VkClearValue *clearValue) {
+        VkRenderingAttachmentInfo depthAttachment = {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .pNext = nullptr,
+                .imageView = imageView,
+                .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                .loadOp = loadOp,
+                .storeOp = storeOp,
+                .clearValue = {
+                        .depthStencil = {
+                                .depth = 1.f,
+                        },
+                },
+        };
+
+        if (clearValue) {
+            depthAttachment.clearValue = *clearValue;
+        }
+
+        return depthAttachment;
+    }
+
+    VkRenderingAttachmentInfo colorAttachment(VkImageView imageView,
+                                              VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
+                                              VkClearValue *clearValue) {
+        VkRenderingAttachmentInfo colorAttachment{
+                .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+                .pNext = nullptr,
+                .imageView = imageView,
+                .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .loadOp = loadOp,
+                .storeOp = storeOp,
+        };
+
+        if (clearValue) {
+            colorAttachment.clearValue = *clearValue;
+        }
+
+        return colorAttachment;
+    }
+
+    VkRenderingInfo renderingInfo(uint32_t width, uint32_t height, uint32_t colorAttachmentCount,
+                                  VkRenderingAttachmentInfo *colorAttachment,
+                                  VkRenderingAttachmentInfo *depthAttachment,
+                                  VkRenderingAttachmentInfo *stencilAttachment) {
+        return {
+                .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .renderArea = {VkOffset2D{0, 0}, {width, height}},
+                .layerCount = 1,
+                .viewMask = 0,
+                .colorAttachmentCount = colorAttachmentCount,
+                .pColorAttachments = colorAttachment,
+                .pDepthAttachment = depthAttachment,
+                .pStencilAttachment = stencilAttachment,
+        };
+    }
+
+    VkRenderingInfo renderingInfo(VkExtent2D extent, uint32_t colorAttachmentCount,
+                                            VkRenderingAttachmentInfo *colorAttachment,
+                                            VkRenderingAttachmentInfo *depthAttachment,
+                                            VkRenderingAttachmentInfo *stencilAttachment) {
+        return renderingInfo(extent.width, extent.height, colorAttachmentCount,
+                             colorAttachment, depthAttachment, stencilAttachment);
+    }
 }

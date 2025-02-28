@@ -28,5 +28,25 @@ namespace VkHelper {
     void genMips(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize);
 
     void genCubemapMips(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize);
+
+    VkRenderingAttachmentInfo colorAttachment(VkImageView imageView,
+                                              VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                              VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                                              VkClearValue *clearValue = nullptr);
+
+    VkRenderingAttachmentInfo depthAttachment(VkImageView imageView,
+                                              VkAttachmentLoadOp loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                                              VkAttachmentStoreOp storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                                              VkClearValue *clearValue = nullptr);
+
+    VkRenderingInfo renderingInfo(uint32_t width, uint32_t height, uint32_t colorAttachmentCount,
+                                  VkRenderingAttachmentInfo *colorAttachment = nullptr,
+                                  VkRenderingAttachmentInfo *depthAttachment = nullptr,
+                                  VkRenderingAttachmentInfo *stencilAttachment = nullptr);
+
+    VkRenderingInfo renderingInfo(VkExtent2D extent, uint32_t colorAttachmentCount,
+                                  VkRenderingAttachmentInfo *colorAttachment = nullptr,
+                                  VkRenderingAttachmentInfo *depthAttachment = nullptr,
+                                  VkRenderingAttachmentInfo *stencilAttachment = nullptr);
 }
 

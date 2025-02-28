@@ -114,7 +114,7 @@ vec3 getIblContribution(PbrInfo pbrInfo, vec3 N, vec3 R) {
     Globals glob = globalBuffer[pc.uniformOffset].globals;
 
     float lod = lodFromRoughness(pbrInfo.perceptualRoughness);
-    vec3 brdf = GET_TEXTURE(glob.brdfLutIndex, 0, vec2(pbrInfo.NoV, 1.0 - pbrInfo.perceptualRoughness)).rgb;
+    vec3 brdf = GET_TEXTURE(glob.brdfLutIndex, glob.cubemapSamplerIndex, vec2(pbrInfo.NoV, 1.0 - pbrInfo.perceptualRoughness)).rgb;
 
     vec3 diffuseLight = srgbToLinear(GET_CUBEMAP(glob.irradianceMapIndex, glob.cubemapSamplerIndex, N)).rgb;
     vec3 specularLight = srgbToLinear(GET_CUBEMAP_LOD(glob.prefilteredCubeIndex, glob.cubemapSamplerIndex, R, lod)).rgb;
