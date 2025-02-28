@@ -100,7 +100,7 @@ namespace Flare {
                 const size_t alignedImageSize = VkHelper::memoryAlign(imageSize, 4);
                 size_t offset = std::atomic_fetch_add(&stagingBufferOffset, alignedImageSize);
 
-                Buffer *stagingBuffer = gpu->buffers.get(stagingBufferHandle);
+                Buffer *stagingBuffer = gpu->getBuffer(stagingBufferHandle);
                 memcpy(static_cast<std::byte *>(stagingBuffer->allocationInfo.pMappedData) + offset,
                        request.data, imageSize);
 
@@ -211,7 +211,7 @@ namespace Flare {
                 const size_t alignedBufferSize = VkHelper::memoryAlign(request.dstBuffer->size, 64);
                 size_t offset = std::atomic_fetch_add(&stagingBufferOffset, alignedBufferSize);
 
-                Buffer *stagingBuffer = gpu->buffers.get(stagingBufferHandle);
+                Buffer *stagingBuffer = gpu->getBuffer(stagingBufferHandle);
                 memcpy(static_cast<std::byte *>(stagingBuffer->allocationInfo.pMappedData) + offset,
                        request.data, request.dstBuffer->size);
 

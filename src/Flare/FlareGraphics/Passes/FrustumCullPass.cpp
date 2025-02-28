@@ -15,8 +15,9 @@ namespace Flare {
                 .size = sizeof(FrustumCullUniforms),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "frustumCullUniform",
+                .bufferType = BufferType::eUniform,
         };
-        frustumUniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, uniformCI, RingBuffer::Type::eUniform);
+        frustumUniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, uniformCI);
     }
 
     void FrustumCullPass::addBarriers(VkCommandBuffer cmd, uint32_t computeFamily, uint32_t mainFamily,
@@ -114,6 +115,6 @@ namespace Flare {
 
     void FrustumCullPass::updateUniforms() {
         frustumUniformRingBuffer.moveToNextBuffer();
-        gpu->uploadBufferData(gpu->getUniform(frustumUniformRingBuffer.buffer()), &uniforms);
+        gpu->uploadBufferData(frustumUniformRingBuffer.buffer(), &uniforms);
     }
 }

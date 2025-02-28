@@ -84,17 +84,11 @@ namespace Flare {
 
         Handle<Buffer> createBuffer(const BufferCI &ci);
 
-        void uploadBufferData(Buffer* buffer, void* data);
+        void uploadBufferData(Handle<Buffer> targetHandle, void* data);
 
         void destroyBuffer(Handle<Buffer> handle);
 
-        Handle<Buffer> createUniform(const BufferCI &ci);
-
-        void destroyUniform(Handle<Buffer> handle);
-
         Buffer *getBuffer(Handle<Buffer> handle);
-
-        Buffer *getUniform(Handle<Buffer> handle);
 
         Texture *getTexture(Handle<Texture> handle);
 
@@ -174,8 +168,8 @@ namespace Flare {
         Handle<Texture> defaultNormalTexture;
 
         ResourcePool<Pipeline> pipelines;
-        ResourcePool<Buffer> buffers;
-        ResourcePool<Buffer> uniforms;
+        ResourcePool<Buffer> storageBuffers;
+        ResourcePool<Buffer> uniformBuffers;
         ResourcePool<Texture> textures;
         ResourcePool<Sampler> samplers;
 

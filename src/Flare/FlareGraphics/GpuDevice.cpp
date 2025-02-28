@@ -56,8 +56,8 @@ namespace Flare {
 
         // Init resource pools;
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
-        buffers.init(gpuDeviceCI.resourcePoolCI.buffers);
-        uniforms.init(gpuDeviceCI.resourcePoolCI.uniforms);
+        storageBuffers.init(gpuDeviceCI.resourcePoolCI.buffers);
+        uniformBuffers.init(gpuDeviceCI.resourcePoolCI.uniforms);
         textures.init(gpuDeviceCI.resourcePoolCI.textures);
         samplers.init(gpuDeviceCI.resourcePoolCI.samplers);
 
@@ -1119,23 +1119,57 @@ namespace Flare {
     }
 
     Handle<Buffer> GpuDevice::createBuffer(const BufferCI &ci) {
-        Handle<Buffer> handle = buffers.obtain();
+        Handle<Buffer> handle;
+
+        switch (ci.bufferType) {
+            case BufferType::eUniform:
+                handle = uniformBuffers.obtain();
+                break;
+            case BufferType::eStorage:
+                handle = storageBuffers.obtain();
+                break;
+        }
+
         if (!handle.isValid()) {
             return handle;
         }
 
-        Buffer *buffer = buffers.get(handle);
+        handle.bufferType = ci.bufferType;
+
+        Buffer *buffer = nullptr;
+        VkDescriptorType descriptorType;
+        VkBufferUsageFlags bufferUsage;
+        uint32_t descriptorSetIndex;
+        switch (ci.bufferType) {
+            case BufferType::eUniform:
+                buffer = uniformBuffers.get(handle);
+                descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                bufferUsage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+                descriptorSetIndex = UNIFORM_BUFFERS_SET;
+                break;
+            case BufferType::eStorage:
+                buffer = storageBuffers.get(handle);
+                descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                bufferUsage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+                descriptorSetIndex = STORAGE_BUFFERS_SET;
+                break;
+        }
+
+        if (buffer == nullptr) {
+            spdlog::error("Error getting buffer");
+            return handle;
+        }
 
         buffer->size = ci.size;
-        buffer->name = ci.name;
-        buffer->handle = handle;
+        buffer->name =
+                std::string(ci.bufferType == BufferType::eStorage ? "Storage buffer " : "Uniform buffer ") + ci.name;
 
         VkBufferCreateInfo bufferCI = {
                 .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
                 .size = ci.size,
-                .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | ci.usageFlags,
+                .usage = ci.usageFlags | bufferUsage,
         };
 
         VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
@@ -1151,12 +1185,12 @@ namespace Flare {
         vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
                         &buffer->allocationInfo);
 
-        if (!ci.name.empty()) {
-            setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, "Buffer " + ci.name);
+        if (!buffer->name.empty()) {
+            setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, buffer->name);
         }
 
         if (ci.initialData) {
-            uploadBufferData(buffer, ci.initialData);
+            uploadBufferData(handle, ci.initialData);
         }
 
         VkDescriptorBufferInfo descBuf = {
@@ -1167,74 +1201,11 @@ namespace Flare {
 
         VkWriteDescriptorSet write = {
                 .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = bindlessDescriptorSets[STORAGE_BUFFERS_SET],
+                .dstSet = bindlessDescriptorSets[descriptorSetIndex],
                 .dstBinding = 0,
                 .dstArrayElement = handle.index,
                 .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                .pBufferInfo = &descBuf,
-        };
-
-        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
-
-        return handle;
-    }
-
-    Handle<Buffer> GpuDevice::createUniform(const BufferCI &ci) {
-        Handle<Buffer> handle = uniforms.obtain();
-        if (!handle.isValid()) {
-            return handle;
-        }
-
-        Buffer *buffer = uniforms.get(handle);
-
-        buffer->size = ci.size;
-        buffer->name = ci.name;
-        buffer->handle = handle;
-
-        VkBufferCreateInfo bufferCI = {
-                .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .size = ci.size,
-                .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | ci.usageFlags,
-        };
-
-        VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
-
-        if (ci.mapped) {
-            allocCI.flags =
-                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        }
-
-        if (ci.readback) {
-            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-        }
-
-        vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
-                        &buffer->allocationInfo);
-
-        if (!ci.name.empty()) {
-            setVkObjectName(buffer->buffer, VK_OBJECT_TYPE_BUFFER, "Uniform " + ci.name);
-        }
-
-        if (ci.initialData) {
-            uploadBufferData(buffer, ci.initialData);
-        }
-
-        VkDescriptorBufferInfo descBuf = {
-                .buffer = buffer->buffer,
-                .offset = 0,
-                .range = buffer->size,
-        };
-
-        VkWriteDescriptorSet write = {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = bindlessDescriptorSets[UNIFORM_BUFFERS_SET],
-                .dstBinding = 0,
-                .dstArrayElement = handle.index,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorType = descriptorType,
                 .pBufferInfo = &descBuf,
         };
 
@@ -1249,24 +1220,19 @@ namespace Flare {
             return;
         }
 
-        Buffer *buffer = buffers.get(handle);
-
-        vmaDestroyBuffer(allocator, buffer->buffer, buffer->allocation);
-
-        buffers.release(handle);
-    }
-
-    void GpuDevice::destroyUniform(Handle<Buffer> handle) {
-        if (!handle.isValid()) {
-            spdlog::error("Invalid buffer handle");
-            return;
+        Buffer *buffer = nullptr;
+        switch (handle.bufferType) {
+            case BufferType::eUniform:
+                buffer = uniformBuffers.get(handle);
+                uniformBuffers.release(handle);
+                break;
+            case BufferType::eStorage:
+                buffer = storageBuffers.get(handle);
+                storageBuffers.release(handle);
+                break;
         }
 
-        Buffer *buffer = uniforms.get(handle);
-
         vmaDestroyBuffer(allocator, buffer->buffer, buffer->allocation);
-
-        uniforms.release(handle);
     }
 
     void GpuDevice::resizeSwapchain() {
@@ -1295,7 +1261,7 @@ namespace Flare {
         texture->depth = ci.depth;
         texture->format = ci.format;
         texture->name = ci.name;
-        texture->handle = handle;
+
         if (ci.genMips) {
             texture->mipLevel = VkHelper::getMipLevel(ci.width, ci.height);
         } else {
@@ -1625,11 +1591,13 @@ namespace Flare {
     }
 
     Buffer *GpuDevice::getBuffer(Handle<Buffer> handle) {
-        return buffers.get(handle);
-    }
-
-    Buffer *GpuDevice::getUniform(Handle<Buffer> handle) {
-        return uniforms.get(handle);
+        switch (handle.bufferType) {
+            case BufferType::eUniform:
+                return uniformBuffers.get(handle);
+            case BufferType::eStorage:
+                return storageBuffers.get(handle);
+        }
+        return nullptr;
     }
 
     Texture *GpuDevice::getTexture(Handle<Texture> handle) {
@@ -1690,7 +1658,7 @@ namespace Flare {
     void GpuDevice::uploadTextureData(Texture *texture, void *data, bool genMips) {
         size_t size = texture->width * texture->height * texture->depth * 4;
 
-        Buffer *stagingBuffer = buffers.get(stagingBufferHandle);
+        Buffer *stagingBuffer = storageBuffers.get(stagingBufferHandle);
 
         memcpy(stagingBuffer->allocationInfo.pMappedData, data, size);
 
@@ -1736,24 +1704,25 @@ namespace Flare {
         submitImmediate(cmd);
     }
 
-    void GpuDevice::uploadBufferData(Buffer *buffer, void *data) {
+    void GpuDevice::uploadBufferData(Handle<Buffer> targetHandle, void *data) {
         if (!data) {
             return;
         }
         Buffer *stagingBuffer = getBuffer(stagingBufferHandle);
+        Buffer *targetBuffer = getBuffer(targetHandle);
 
-        memcpy(stagingBuffer->allocationInfo.pMappedData, data, buffer->size);
+        memcpy(stagingBuffer->allocationInfo.pMappedData, data, targetBuffer->size);
 
         VkCommandBuffer cmd = getCommandBuffer();
         VkBufferCopy2 region = {
                 .sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2,
-                .size = buffer->size,
+                .size = targetBuffer->size,
         };
 
         VkCopyBufferInfo2 copyInfo = {
                 .sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2,
                 .srcBuffer = stagingBuffer->buffer,
-                .dstBuffer = buffer->buffer,
+                .dstBuffer = targetBuffer->buffer,
                 .regionCount = 1,
                 .pRegions = &region,
         };
@@ -1767,9 +1736,9 @@ namespace Flare {
                 .srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
                 .dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
                 .dstAccessMask = 0,
-                .buffer = buffer->buffer,
+                .buffer = targetBuffer->buffer,
                 .offset = 0,
-                .size = buffer->size,
+                .size = targetBuffer->size,
         };
 
         VkDependencyInfo depInfo = {

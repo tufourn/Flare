@@ -14,69 +14,9 @@
 namespace Flare {
     constexpr uint32_t invalidIndex = 0xFFFFFFFF;
 
-    template<typename T>
-    struct Handle {
-        uint32_t index = invalidIndex;
-
-        bool isValid() const { return index != invalidIndex; }
-
-        void invalidate() { index = invalidIndex; }
-    };
-
-    template<typename T>
-    struct ResourcePool {
-        std::vector<T> data;
-        std::vector<uint32_t> availableHandles;
-
-        size_t poolSize = 0;
-        size_t freeHandleHead = 0;
-        size_t usedHandleCount = 0;
-
-        void init(size_t size) {
-            poolSize = size;
-            data.resize(poolSize);
-            availableHandles.resize(poolSize);
-            for (size_t i = 0; i < poolSize; i++) {
-                availableHandles[i] = i;
-            }
-        }
-
-        Handle<T> obtain() {
-            if (freeHandleHead < poolSize) {
-                uint32_t handleIndex = availableHandles[freeHandleHead++];
-                usedHandleCount++;
-                return Handle<T>{.index = handleIndex};
-            } else {
-                spdlog::error("ResourcePool: No more resources left");
-                return Handle<T>{.index = invalidIndex};
-            }
-        }
-
-        void release(Handle<T> handle) {
-            if (handle.isValid() && handle.index < poolSize) {
-                availableHandles[--freeHandleHead] = handle.index;
-                usedHandleCount--;
-            } else {
-                spdlog::error("ResourcePool: Attempting to release an invalid handle");
-            }
-        }
-
-        void swap(Handle<T> l, Handle<T> r) {
-            if (!l.isValid() || !r.isValid()) {
-                spdlog::error("ResourcePool: Attempting to swap invalid handles");
-                return;
-            }
-            std::swap(data[l.index], data[r.index]);
-        }
-
-        T *get(Handle<T> handle) {
-            if (handle.isValid() && handle.index < poolSize) {
-                return &data[handle.index];
-            } else {
-                spdlog::error("ResourcePool: Invalid handle access");
-                return nullptr;
-            }
-        }
+    enum class BufferType {
+        eStorage,
+        eUniform,
     };
 
     struct ShaderStage {
@@ -164,12 +104,13 @@ namespace Flare {
     };
 
     struct BufferCI {
-        void* initialData = nullptr;
+        void *initialData = nullptr;
         size_t size = 0;
         VkBufferUsageFlags usageFlags = VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM;
         bool mapped = false;
         bool readback = false;
         std::string name;
+        BufferType bufferType = BufferType::eStorage;
     };
 
     struct Buffer {
@@ -178,7 +119,6 @@ namespace Flare {
         VmaAllocationInfo allocationInfo;
         size_t size;
 
-        Handle<Buffer> handle;
         std::string name;
     };
 
@@ -199,7 +139,7 @@ namespace Flare {
     };
 
     struct TextureCI {
-        void* initialData = nullptr;
+        void *initialData = nullptr;
         uint32_t width = 1;
         uint32_t height = 1;
         uint32_t depth = 1;
@@ -224,7 +164,6 @@ namespace Flare {
         uint32_t mipLevel = 1;
         uint32_t layerCount = 1;
 
-        Handle<Texture> handle;
         std::string name;
     };
 
@@ -258,5 +197,80 @@ namespace Flare {
         uint32_t data0; // 4
         uint32_t data1; // 4
         uint32_t data2; // 4
+    };
+
+    template<typename T>
+    struct Handle {
+        uint32_t index = invalidIndex;
+
+        bool isValid() const { return index != invalidIndex; }
+
+        void invalidate() { index = invalidIndex; }
+    };
+
+    template<>
+    struct Handle<Buffer> {
+        uint32_t index = invalidIndex;
+        BufferType bufferType = BufferType::eStorage;
+
+        bool isValid() const { return index != invalidIndex; }
+
+        void invalidate() { index = invalidIndex; }
+    };
+
+    template<typename T>
+    struct ResourcePool {
+        std::vector<T> data;
+        std::vector<uint32_t> availableHandles;
+
+        size_t poolSize = 0;
+        size_t freeHandleHead = 0;
+        size_t usedHandleCount = 0;
+
+        void init(size_t size) {
+            poolSize = size;
+            data.resize(poolSize);
+            availableHandles.resize(poolSize);
+            for (size_t i = 0; i < poolSize; i++) {
+                availableHandles[i] = i;
+            }
+        }
+
+        Handle<T> obtain() {
+            if (freeHandleHead < poolSize) {
+                uint32_t handleIndex = availableHandles[freeHandleHead++];
+                usedHandleCount++;
+                return Handle<T>{.index = handleIndex};
+            } else {
+                spdlog::error("ResourcePool: No more resources left");
+                return Handle<T>{.index = invalidIndex};
+            }
+        }
+
+        void release(Handle<T> handle) {
+            if (handle.isValid() && handle.index < poolSize) {
+                availableHandles[--freeHandleHead] = handle.index;
+                usedHandleCount--;
+            } else {
+                spdlog::error("ResourcePool: Attempting to release an invalid handle");
+            }
+        }
+
+        void swap(Handle<T> l, Handle<T> r) {
+            if (!l.isValid() || !r.isValid()) {
+                spdlog::error("ResourcePool: Attempting to swap invalid handles");
+                return;
+            }
+            std::swap(data[l.index], data[r.index]);
+        }
+
+        T *get(Handle<T> handle) {
+            if (handle.isValid() && handle.index < poolSize) {
+                return &data[handle.index];
+            } else {
+                spdlog::error("ResourcePool: Invalid handle access");
+                return nullptr;
+            }
+        }
     };
 }

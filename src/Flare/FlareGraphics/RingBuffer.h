@@ -6,12 +6,7 @@ namespace Flare {
     struct GpuDevice;
 
     struct RingBuffer {
-        enum class Type {
-            eUniform,
-            eStorage,
-        };
-
-        void init(GpuDevice *gpu, uint32_t bufferCount, const BufferCI &ci, Type type);
+        void init(GpuDevice *gpu, uint32_t bufferCount, const BufferCI &ci);
 
         void shutdown();
 
@@ -24,6 +19,5 @@ namespace Flare {
         GpuDevice* gpuDevice;
         uint32_t ringIndex = 0;
         std::vector<Handle<Buffer>> bufferRing;
-        Type bufferType;
     };
 }

@@ -82,8 +82,9 @@ struct TriangleApp : Application {
                 .size = sizeof(Globals),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "globals",
+                .bufferType = BufferType::eUniform,
         };
-        globalsRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, globalsBufferCI, RingBuffer::Type::eUniform);
+        globalsRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, globalsBufferCI);
 
         BufferCI positionsCI = {
                 .initialData = gltf.positions.data(),
@@ -291,7 +292,7 @@ struct TriangleApp : Application {
                     globals.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
                 }
 
-                gpu.uploadBufferData(gpu.getUniform(globalsRingBuffer.buffer()), &globals);
+                gpu.uploadBufferData(globalsRingBuffer.buffer(), &globals);
 
                 // shadows
                 shadowPass.uniforms.lightSpaceMatrix = lightSpaceMatrix;
@@ -369,7 +370,8 @@ struct TriangleApp : Application {
                 vkCmdBeginRendering(cmd, &renderingInfo);
                 vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
 
-                vkCmdBindIndexBuffer(cmd, gpu.buffers.get(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
+
+                vkCmdBindIndexBuffer(cmd, gpu.getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
                 vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
                                         gpu.bindlessDescriptorSets.size(), gpu.bindlessDescriptorSets.data(),
                                         0, nullptr);

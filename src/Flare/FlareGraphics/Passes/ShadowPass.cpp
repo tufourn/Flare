@@ -57,8 +57,9 @@ namespace Flare {
                 .size = sizeof(ShadowUniform),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "shadowUniforms",
+                .bufferType = BufferType::eUniform,
         };
-        shadowUniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, shadowUniformBufferCI, RingBuffer::Type::eUniform);
+        shadowUniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, shadowUniformBufferCI);
     }
 
     void ShadowPass::shutdown() {
@@ -150,7 +151,6 @@ namespace Flare {
 
     void ShadowPass::updateUniforms() {
         shadowUniformRingBuffer.moveToNextBuffer();
-        gpu->uploadBufferData(gpu->getUniform(shadowUniformRingBuffer.buffer()), &uniforms);
+        gpu->uploadBufferData(shadowUniformRingBuffer.buffer(), &uniforms);
     }
-
 }
