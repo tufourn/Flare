@@ -6,21 +6,19 @@
 
 struct ShadowUniform {
     mat4 lightSpaceMatrix;
-
-    uint indirectDrawDataBufferIndex;
-    uint positionBufferIndex;
-    uint transformBufferIndex;
-    float pad;
 };
 
 layout (set = 0, binding = 0) uniform U { ShadowUniform shadowUniform; } shadowUniformAlias[];
 
 void main() {
+    const uint indirectDrawDataBufferIndex = pc.data0;
+    const uint positionBufferIndex = pc.data1;
+    const uint transformBufferIndex = pc.data2;
     ShadowUniform shadowUniform = shadowUniformAlias[pc.uniformOffset].shadowUniform;
-    IndirectDrawData dd = indirectDrawDataAlias[shadowUniform.indirectDrawDataBufferIndex].indirectDrawDatas[gl_DrawID];
+    IndirectDrawData dd = indirectDrawDataAlias[indirectDrawDataBufferIndex].indirectDrawDatas[gl_DrawID];
 
-    mat4 transform = transformAlias[shadowUniform.transformBufferIndex].transforms[dd.transformOffset];
-    vec4 position = positionAlias[shadowUniform.positionBufferIndex].positions[gl_VertexIndex];
+    mat4 transform = transformAlias[transformBufferIndex].transforms[dd.transformOffset];
+    vec4 position = positionAlias[positionBufferIndex].positions[gl_VertexIndex];
 
     gl_Position = shadowUniform.lightSpaceMatrix * transform * position;
 }

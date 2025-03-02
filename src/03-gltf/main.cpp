@@ -12,6 +12,7 @@
 #include "FlareGraphics/FlareImgui.h"
 #include "imgui.h"
 #include "FlareGraphics/Passes/SkyboxPass.h"
+#include "FlareGraphics/Passes/GBufferPass.h"
 
 using namespace Flare;
 
@@ -74,9 +75,9 @@ struct TriangleApp : Application {
 
 //        gltf.init("assets/BoxTextured.gltf", &gpu);
 //        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
-        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
+//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
-//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
+        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -188,6 +189,7 @@ struct TriangleApp : Application {
         skyboxPass.init(&gpu);
         skyboxPass.loadImage("assets/AllSkyFree_Sky_EpicBlueSunset_Equirect.png");
 //        skyboxPass.loadImage("assets/free_hdri_sky_816.jpg");
+        gBufferPass.init(&gpu);
 
         globals.positionBufferIndex = positionBufferHandle.index;
         globals.normalBufferIndex = normalBufferHandle.index;
@@ -213,18 +215,6 @@ struct TriangleApp : Application {
                 .intensity = 1.f,
         };
 
-        // shadow uniforms
-        shadowPass.uniforms.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
-        shadowPass.uniforms.positionBufferIndex = positionBufferHandle.index;
-        shadowPass.uniforms.transformBufferIndex = transformBufferHandle.index;
-
-        // frustum cull uniforms
-        frustumCullPass.uniforms.transformBufferIndex = transformBufferHandle.index;
-        frustumCullPass.uniforms.inputIndirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
-        frustumCullPass.uniforms.outputIndirectDrawDataBufferIndex = culledIndirectDrawDataBufferHandle.index;
-        frustumCullPass.uniforms.boundsBufferIndex = boundsBufferHandle.index;
-        frustumCullPass.uniforms.countBufferIndex = countBufferHandle.index;
-
         glfwSetWindowUserPointer(window.glfwWindow, &camera);
         glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
         glfwSetKeyCallback(window.glfwWindow, Camera::keyCallback);
@@ -241,6 +231,7 @@ struct TriangleApp : Application {
                 window.shouldResize = false;
 
                 gpu.resizeSwapchain();
+                gBufferPass.genRenderTargets(window.width, window.height);
             }
 
             if (!window.isMinimized()) {
@@ -295,6 +286,7 @@ struct TriangleApp : Application {
                 gpu.uploadBufferData(globalsRingBuffer.buffer(), &globals);
 
                 // shadows
+                shadowPass.setBuffers(indirectDrawDataBufferHandle, positionBufferHandle, transformBufferHandle);
                 shadowPass.uniforms.lightSpaceMatrix = lightSpaceMatrix;
                 shadowPass.updateUniforms();
 
@@ -302,8 +294,9 @@ struct TriangleApp : Application {
                 if (!fixedFrustum) {
                     frustumCullPass.uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(projection * view);
                 }
-                frustumCullPass.uniforms.drawCount = indirectDrawDatas.size();
                 frustumCullPass.updateUniforms();
+                frustumCullPass.setBuffers(indirectDrawDataBufferHandle, culledIndirectDrawDataBufferHandle,
+                                           countBufferHandle, transformBufferHandle, boundsBufferHandle);
 
                 PushConstants pc = {
                         .uniformOffset = globalsRingBuffer.buffer().index,
@@ -319,11 +312,11 @@ struct TriangleApp : Application {
                                   indexBufferHandle,
                                   indirectDrawDataBufferHandle, indirectDrawDatas.size());
 
-                frustumCullPass.cull(cmd);
                 //todo: implement compute queue, currently using the main queue here
-                frustumCullPass.addBarriers(cmd, gpu.mainFamily, gpu.mainFamily,
-                                            culledIndirectDrawDataBufferHandle,
-                                            countBufferHandle);
+                frustumCullPass.cull(cmd);
+                frustumCullPass.addBarriers(cmd, gpu.mainFamily, gpu.mainFamily);
+
+                gBufferPass.render(cmd);
 
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
                                           VK_IMAGE_LAYOUT_UNDEFINED,
@@ -424,6 +417,7 @@ struct TriangleApp : Application {
         shadowPass.shutdown();
         frustumCullPass.shutdown();
         skyboxPass.shutdown();
+        gBufferPass.shutdown();
 
         imgui.shutdown();
 
@@ -488,6 +482,7 @@ struct TriangleApp : Application {
     ShadowPass shadowPass;
     FrustumCullPass frustumCullPass;
     SkyboxPass skyboxPass;
+    GBufferPass gBufferPass;
 };
 
 int main() {

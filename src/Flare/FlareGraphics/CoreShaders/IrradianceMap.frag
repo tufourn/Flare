@@ -22,6 +22,9 @@ void main() {
     float sampleDelta = 0.05;
     float nrSamples = 0.0;
 
+    const uint cubemapTexture = pc.data0;
+    const uint cubemapSampler = pc.data1;
+
     for (float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta) {
         for (float theta = 0.0; theta < 0.5 * PI; theta += sampleDelta) {
             // spherical to cartesian (in tangent space)
@@ -29,7 +32,7 @@ void main() {
             // tangent space to world
             vec3 sampleVec = tangentSample.x * right + tangentSample.y * up + tangentSample.z * normal;
 
-            irradiance += GET_CUBEMAP(pc.data0, pc.data1, sampleVec).rgb * cos(theta) * sin(theta);
+            irradiance += GET_CUBEMAP(cubemapTexture, cubemapSampler, sampleVec).rgb * cos(theta) * sin(theta);
 
             nrSamples++;
         }

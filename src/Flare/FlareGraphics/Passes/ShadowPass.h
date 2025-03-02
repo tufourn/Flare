@@ -10,11 +10,6 @@ namespace Flare {
 
     struct ShadowUniform {
         glm::mat4 lightSpaceMatrix;
-
-        uint32_t indirectDrawDataBufferIndex;
-        uint32_t positionBufferIndex;
-        uint32_t transformBufferIndex;
-        float pad;
     };
 
     struct ShadowPass {
@@ -23,6 +18,8 @@ namespace Flare {
         void shutdown();
 
         void updateUniforms();
+
+        void setBuffers(Handle<Buffer> indirectBuffer, Handle<Buffer> positionBuffer, Handle<Buffer> transformBuffer);
 
         void render(VkCommandBuffer cmd,
                     Handle<Buffer> indexBuffer,
@@ -41,5 +38,7 @@ namespace Flare {
 
         ShadowUniform uniforms;
         RingBuffer shadowUniformRingBuffer;
+
+        PushConstants pc;
     };
 }

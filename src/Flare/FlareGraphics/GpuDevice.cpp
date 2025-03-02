@@ -56,9 +56,10 @@ namespace Flare {
 
         // Init resource pools;
         pipelines.init(gpuDeviceCI.resourcePoolCI.pipelines);
-        storageBuffers.init(gpuDeviceCI.resourcePoolCI.buffers);
-        uniformBuffers.init(gpuDeviceCI.resourcePoolCI.uniforms);
+        storageBuffers.init(gpuDeviceCI.resourcePoolCI.storageBuffers);
+        uniformBuffers.init(gpuDeviceCI.resourcePoolCI.uniformBuffers);
         textures.init(gpuDeviceCI.resourcePoolCI.textures);
+        storageTextures.init(gpuDeviceCI.resourcePoolCI.storageTextures);
         samplers.init(gpuDeviceCI.resourcePoolCI.samplers);
 
         // Instance
@@ -1285,6 +1286,12 @@ namespace Flare {
             usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         }
 
+        if (ci.storage) {
+            usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+            Handle<uint8_t> storageTextureHandle = storageTextures.obtain();
+            handle.storageIndex = storageTextureHandle.index;
+        }
+
         VkImageCreateInfo imageCI = {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                 .pNext = nullptr,
@@ -1343,22 +1350,39 @@ namespace Flare {
         }
 
         VkDescriptorImageInfo imageInfo = {
-                .imageView = texture->format == VK_FORMAT_UNDEFINED ? textures.get(defaultTexture)->imageView
-                                                                    : texture->imageView,
+                .imageView = texture->imageView,
                 .imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL,
         };
 
-        VkWriteDescriptorSet write = {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = bindlessDescriptorSets[SAMPLED_IMAGES_SET],
-                .dstBinding = 0,
-                .dstArrayElement = handle.index,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-                .pImageInfo = &imageInfo
+        VkDescriptorImageInfo storageImageInfo = {
+                .imageView = texture->imageView,
+                .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
         };
 
-        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+        VkWriteDescriptorSet writes[] = {
+                {
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = bindlessDescriptorSets[SAMPLED_IMAGES_SET],
+                        .dstBinding = 0,
+                        .dstArrayElement = handle.index,
+                        .descriptorCount = 1,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                        .pImageInfo = &imageInfo
+                },
+                {
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = bindlessDescriptorSets[STORAGE_IMAGES_SET],
+                        .dstBinding = 0,
+                        .dstArrayElement = handle.storageIndex,
+                        .descriptorCount = 1,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                        .pImageInfo = &storageImageInfo
+                },
+        };
+
+        vkUpdateDescriptorSets(device,
+                               ci.storage ? 2 : 1,
+                               writes, 0, nullptr);
 
         return handle;
     }
@@ -1374,6 +1398,11 @@ namespace Flare {
         vkDestroyImageView(device, texture->imageView, nullptr);
         vmaDestroyImage(allocator, texture->image, texture->allocation);
 
+        if (handle.storageIndex != invalidIndex) { // construct handle to release for proper storage image indexing
+            Handle<uint8_t> storageTextureHandle;
+            storageTextureHandle.index = handle.storageIndex;
+            storageTextures.release(storageTextureHandle);
+        }
         textures.release(handle);
     }
 

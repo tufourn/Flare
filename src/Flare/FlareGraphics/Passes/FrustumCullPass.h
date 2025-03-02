@@ -17,14 +17,6 @@ namespace Flare {
 
     struct FrustumCullUniforms {
         FrustumPlanes frustumPlanes;
-
-        uint32_t transformBufferIndex;
-        uint32_t inputIndirectDrawDataBufferIndex;
-        uint32_t outputIndirectDrawDataBufferIndex;
-        uint32_t boundsBufferIndex;
-
-        uint32_t countBufferIndex;
-        uint32_t drawCount;
     };
 
     struct FrustumCullPass {
@@ -34,10 +26,12 @@ namespace Flare {
 
         void updateUniforms();
 
+        void setBuffers(Handle<Buffer> inputBuffer, Handle<Buffer> outputBuffer, Handle<Buffer> countBuffer,
+                        Handle<Buffer> transformBuffer, Handle<Buffer> boundsBuffer);
+
         void cull(VkCommandBuffer cmd);
 
-        void addBarriers(VkCommandBuffer cmd, uint32_t computeFamily, uint32_t mainFamily,
-                         Handle<Buffer> outputIndirectDrawBufferHandle, Handle<Buffer> outputCountBufferHandle);
+        void addBarriers(VkCommandBuffer cmd, uint32_t computeFamily, uint32_t mainFamily);
 
         void shutdown();
 
@@ -48,5 +42,10 @@ namespace Flare {
 
         FrustumCullUniforms uniforms;
         RingBuffer frustumUniformRingBuffer;
+        PushConstants pc;
+
+        uint32_t maxDrawCount = 0;
+        Handle<Buffer> outputIndirectBufferHandle; // store these 2 handles to add barrier
+        Handle<Buffer> outputCountBufferHandle;
     };
 }

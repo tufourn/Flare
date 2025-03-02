@@ -19,8 +19,11 @@ vec2 sampleSphericalMap(vec3 v)
 }
 
 void main() {
+    const uint loadedEquirectTexture = pc.data0;
+    const uint cubemapSampler = pc.data1;
+
     vec2 uv = sampleSphericalMap(normalize(inUVW));
-    vec3 color = GET_TEXTURE(pc.data0, pc.data1, uv).rgb;
+    vec3 color = GET_TEXTURE(loadedEquirectTexture, cubemapSampler, uv).rgb;
 
     outColor = vec4(color, 1.0);
 }

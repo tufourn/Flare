@@ -9,6 +9,11 @@ layout (push_constant) uniform PushConstants {
     uint data0;
     uint data1;
     uint data2;
+
+    uint data3;
+    uint data4;
+    uint data5;
+    uint data6;
 } pc;
 
 // Textures and samplers

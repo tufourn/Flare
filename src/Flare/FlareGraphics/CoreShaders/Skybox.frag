@@ -12,5 +12,8 @@ layout (location = 0) in vec3 inUVW;
 layout (location = 0) out vec4 outColor;
 
 void main() {
-    outColor = srgbToLinear(GET_CUBEMAP(pc.data0, pc.data1, inUVW));
+    const uint skyboxTexture = pc.data0;
+    const uint skyboxSampler = pc.data1;
+
+    outColor = srgbToLinear(GET_CUBEMAP(skyboxTexture, skyboxSampler, inUVW));
 }

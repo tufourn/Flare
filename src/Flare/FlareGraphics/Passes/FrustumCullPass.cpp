@@ -20,10 +20,8 @@ namespace Flare {
         frustumUniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, uniformCI);
     }
 
-    void FrustumCullPass::addBarriers(VkCommandBuffer cmd, uint32_t computeFamily, uint32_t mainFamily,
-                                      Handle<Buffer> outputIndirectDrawBufferHandle,
-                                      Handle<Buffer> outputCountBufferHandle) {
-        Buffer *outputIndirectDrawBuffer = gpu->getBuffer(outputIndirectDrawBufferHandle);
+    void FrustumCullPass::addBarriers(VkCommandBuffer cmd, uint32_t computeFamily, uint32_t mainFamily) {
+        Buffer *outputIndirectDrawBuffer = gpu->getBuffer(outputIndirectBufferHandle);
         Buffer *outputCountBuffer = gpu->getBuffer(outputCountBufferHandle);
 
         VkBufferMemoryBarrier2 barriers[] = {
@@ -74,16 +72,14 @@ namespace Flare {
     void FrustumCullPass::cull(VkCommandBuffer cmd) {
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
-        PushConstants pc{
-                .uniformOffset = frustumUniformRingBuffer.buffer().index,
-        };
+        pc.uniformOffset = frustumUniformRingBuffer.buffer().index;
 
         vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
         vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pc);
         vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
                                 gpu->bindlessDescriptorSets.size(), gpu->bindlessDescriptorSets.data(),
                                 0, nullptr);
-        vkCmdDispatch(cmd, (uniforms.drawCount / 256) + 1, 1, 1);
+        vkCmdDispatch(cmd, (maxDrawCount / 256) + 1, 1, 1);
     }
 
     FrustumPlanes FrustumCullPass::getFrustumPlanes(glm::mat4 mat, bool normalize) {
@@ -116,5 +112,20 @@ namespace Flare {
     void FrustumCullPass::updateUniforms() {
         frustumUniformRingBuffer.moveToNextBuffer();
         gpu->uploadBufferData(frustumUniformRingBuffer.buffer(), &uniforms);
+    }
+
+    void
+    FrustumCullPass::setBuffers(Handle<Buffer> inputBuffer, Handle<Buffer> outputBuffer, Handle<Buffer> countBuffer,
+                                Handle<Buffer> transformBuffer, Handle<Buffer> boundsBuffer) {
+        maxDrawCount = gpu->getBuffer(inputBuffer)->size / sizeof(IndirectDrawData);
+        outputIndirectBufferHandle = outputBuffer;
+        outputCountBufferHandle = countBuffer;
+
+        pc.data0 = inputBuffer.index;
+        pc.data1 = outputBuffer.index;
+        pc.data2 = countBuffer.index;
+        pc.data3 = transformBuffer.index;
+        pc.data4 = boundsBuffer.index;
+        pc.data5 = maxDrawCount;
     }
 }

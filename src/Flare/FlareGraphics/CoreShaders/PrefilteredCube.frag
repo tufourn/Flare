@@ -59,6 +59,9 @@ void main() {
     vec3 prefilteredColor = vec3(0.0);
     float roughness = 0.1f;
 
+    const uint cubemapTexture = pc.data0;
+    const uint cubemapSampler = pc.data1;
+
     for (uint i = 0u; i < sampleCount; i++) {
         vec2 Xi = Hammersley(i, sampleCount);
         vec3 H  = ImportanceSampleGGX(Xi, N, roughness);
@@ -67,7 +70,7 @@ void main() {
         float NdotL = max(dot(N, L), 0.0);
         if (NdotL > 0.0)
         {
-            prefilteredColor += GET_CUBEMAP(pc.data0, pc.data1, L).rgb * NdotL;
+            prefilteredColor += GET_CUBEMAP(cubemapTexture, cubemapSampler, L).rgb * NdotL;
             totalWeight      += NdotL;
         }
     }

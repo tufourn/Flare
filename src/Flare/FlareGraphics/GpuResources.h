@@ -150,6 +150,7 @@ namespace Flare {
         bool genMips = false;
         bool cubemap = false;
         bool offscreenDraw = false;
+        bool storage = false;
     };
 
     struct Texture {
@@ -197,6 +198,11 @@ namespace Flare {
         uint32_t data0; // 4
         uint32_t data1; // 4
         uint32_t data2; // 4
+
+        uint32_t data3; // 4
+        uint32_t data4; // 4
+        uint32_t data5; // 4
+        uint32_t data6; // 4
     };
 
     template<typename T>
@@ -216,6 +222,19 @@ namespace Flare {
         bool isValid() const { return index != invalidIndex; }
 
         void invalidate() { index = invalidIndex; }
+    };
+
+    template<>
+    struct Handle<Texture> {
+        uint32_t index = invalidIndex;
+        uint32_t storageIndex = invalidIndex;
+
+        bool isValid() const { return index != invalidIndex; }
+
+        void invalidate() {
+            index = invalidIndex;
+            storageIndex = invalidIndex;
+        }
     };
 
     template<typename T>

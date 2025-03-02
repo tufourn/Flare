@@ -81,9 +81,7 @@ namespace Flare {
         Texture *texture = gpu->getTexture(depthTextureHandle);
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
-        PushConstants pc{
-                .uniformOffset = shadowUniformRingBuffer.buffer().index,
-        };
+        pc.uniformOffset = shadowUniformRingBuffer.buffer().index;
 
         VkHelper::transitionImage(cmd, texture->image,
                                   VK_IMAGE_LAYOUT_UNDEFINED,
@@ -126,5 +124,12 @@ namespace Flare {
     void ShadowPass::updateUniforms() {
         shadowUniformRingBuffer.moveToNextBuffer();
         gpu->uploadBufferData(shadowUniformRingBuffer.buffer(), &uniforms);
+    }
+
+    void ShadowPass::setBuffers(Handle<Buffer> indirectBuffer, Handle<Buffer> positionBuffer,
+                                Handle<Buffer> transformBuffer) {
+        pc.data0 = indirectBuffer.index;
+        pc.data1 = positionBuffer.index;
+        pc.data2 = transformBuffer.index;
     }
 }

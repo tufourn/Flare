@@ -28,9 +28,10 @@ namespace Flare {
 
     struct ResourcePoolCI {
         uint32_t pipelines = 256;
-        uint32_t buffers = 256;
-        uint32_t uniforms = 256;
-        uint32_t textures = 256;
+        uint32_t storageBuffers = 512;
+        uint32_t uniformBuffers = 512;
+        uint32_t textures = 512;
+        uint32_t storageTextures = 64;
         uint32_t samplers = 256;
     };
 
@@ -171,6 +172,7 @@ namespace Flare {
         ResourcePool<Buffer> storageBuffers;
         ResourcePool<Buffer> uniformBuffers;
         ResourcePool<Texture> textures;
+        ResourcePool<uint8_t> storageTextures; // to ensure proper storage image indexing
         ResourcePool<Sampler> samplers;
 
         template<typename T>

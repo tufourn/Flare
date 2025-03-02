@@ -18,37 +18,36 @@ layout(set = 1, binding = 0) writeonly buffer OutputIndirectDrawDataBuffer {
 
 struct FrustumCullUniform {
     vec4 frustumPlanes[6];
-
-    uint transformBufferIndex;
-    uint inputIndirectDrawDataBufferIndex;
-    uint outputIndirectDrawDataBufferIndex;
-    uint boundsBufferIndex;
-
-    uint countBufferIndex;
-    uint drawCount;
 };
 layout (set = 0, binding = 0) uniform U { FrustumCullUniform frustumCullUniform; } frustumCullUniformAlias[];
 
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main() {
+    const uint inputIndirectDrawDataBufferIndex = pc.data0;
+    const uint outputIndirectDrawDataBufferIndex = pc.data1;
+    const uint countBufferIndex = pc.data2;
+    const uint transformBufferIndex = pc.data3;
+    const uint boundsBufferIndex = pc.data4;
+    const uint drawCount = pc.data5;
+
     uint currentThreadId = gl_GlobalInvocationID.x;
     FrustumCullUniform frustumCullUniform = frustumCullUniformAlias[pc.uniformOffset].frustumCullUniform;
 
-    if (currentThreadId >= frustumCullUniform.drawCount) {
+    if (currentThreadId >= drawCount) {
         return;
     }
 
     if (currentThreadId == 0) {
-        atomicExchange(countAlias[frustumCullUniform.countBufferIndex].count, 0);
+        atomicExchange(countAlias[countBufferIndex].count, 0);
     }
 
     barrier();
 
-    IndirectDrawData inDrawData = indirectDrawDataAlias[frustumCullUniform.inputIndirectDrawDataBufferIndex].indirectDrawDatas[currentThreadId];
+    IndirectDrawData inDrawData = indirectDrawDataAlias[inputIndirectDrawDataBufferIndex].indirectDrawDatas[currentThreadId];
 
-    mat4 transform = transformAlias[frustumCullUniform.transformBufferIndex].transforms[inDrawData.transformOffset];
+    mat4 transform = transformAlias[transformBufferIndex].transforms[inDrawData.transformOffset];
 
-    Bounds bounds = boundsAlias[frustumCullUniform.boundsBufferIndex].bounds[currentThreadId];
+    Bounds bounds = boundsAlias[boundsBufferIndex].bounds[currentThreadId];
 
     vec4 origin = (transform * vec4(bounds.origin, 1.0));
     float radius = bounds.radius * max(max(transform[0][0], transform[1][1]), transform[2][2]);
@@ -62,7 +61,7 @@ void main() {
     }
 
     if (isVisible) {
-        uint index = atomicAdd(countAlias[frustumCullUniform.countBufferIndex].count, 1);
-        outputIndirectDrawDataAlias[frustumCullUniform.outputIndirectDrawDataBufferIndex].indirectDrawDatas[index] = inDrawData;
+        uint index = atomicAdd(countAlias[countBufferIndex].count, 1);
+        outputIndirectDrawDataAlias[outputIndirectDrawDataBufferIndex].indirectDrawDatas[index] = inDrawData;
     }
 }

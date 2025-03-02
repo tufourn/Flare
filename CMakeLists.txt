@@ -187,6 +187,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/Passes/SkyboxPass.h
         src/Flare/FlareGraphics/BasicGeometry.cpp
         src/Flare/FlareGraphics/BasicGeometry.h
+        src/Flare/FlareGraphics/Passes/GBufferPass.cpp
+        src/Flare/FlareGraphics/Passes/GBufferPass.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal
