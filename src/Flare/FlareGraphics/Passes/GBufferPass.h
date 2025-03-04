@@ -33,6 +33,8 @@ namespace Flare {
         Handle<Texture> depthTargetHandle;
         Handle<Texture> albedoTargetHandle;
         Handle<Texture> normalTargetHandle;
+        Handle<Texture> occlusionMetallicRoughnessTargetHandle;
+        Handle<Texture> emissiveTargetHandle;
 
         PipelineCI pipelineCI;
         Handle<Pipeline> pipelineHandle;

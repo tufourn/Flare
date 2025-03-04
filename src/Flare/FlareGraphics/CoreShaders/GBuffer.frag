@@ -16,6 +16,8 @@ layout (location = 5) in mat3 inTBN;
 
 layout (location = 0) out vec4 outAlbedo;
 layout (location = 1) out vec2 outNormal;
+layout (location = 2) out vec4 outOcclusionMetallicRoughness;
+layout (location = 3) out vec4 outEmissive;
 
 void main() {
     uint indirectDrawIndex = pc.data0;
@@ -27,9 +29,23 @@ void main() {
     Material mat = materialAlias[materialIndex].materials[dd.materialOffset];
 
     TextureIndex albedoIndex = textureIndexAlias[textureIndex].textureIndices[mat.albedoTextureOffset];
-    outAlbedo = GET_TEXTURE(albedoIndex.textureIndex, albedoIndex.samplerIndex, inUV);
+    outAlbedo = srgbToLinear(GET_TEXTURE(albedoIndex.textureIndex, albedoIndex.samplerIndex, inUV));
 
     TextureIndex normalIndex = textureIndexAlias[textureIndex].textureIndices[mat.normalTextureOffset];
     vec3 normal = GET_TEXTURE(normalIndex.textureIndex, normalIndex.samplerIndex, inUV).rgb;
     outNormal = octahedralEncode(normalize(inTBN * (normal * 2.0 - 1.0)));
+
+    TextureIndex metallicRoughnessIndex = textureIndexAlias[textureIndex].textureIndices[mat.metallicRoughnessTextureOffset];
+    vec4 metallicRoughness = GET_TEXTURE(metallicRoughnessIndex.textureIndex, metallicRoughnessIndex.samplerIndex, inUV);
+    TextureIndex occlusionIndex = textureIndexAlias[textureIndex].textureIndices[mat.occlusionTextureOffset];
+    float occlusion = GET_TEXTURE(occlusionIndex.textureIndex, occlusionIndex.samplerIndex, inUV).r;
+
+    outOcclusionMetallicRoughness.r = occlusion;
+    outOcclusionMetallicRoughness.g = metallicRoughness.b;
+    outOcclusionMetallicRoughness.b = metallicRoughness.g;
+
+    vec3 emissive = mat.emissiveFactor;
+    TextureIndex emissiveIndex = textureIndexAlias[textureIndex].textureIndices[mat.emissiveTextureOffset];
+    emissive *= srgbToLinear(GET_TEXTURE(emissiveIndex.textureIndex, emissiveIndex.samplerIndex, inUV)).rgb;
+    outEmissive = vec4(emissive, 1.0);
 }

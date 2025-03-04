@@ -23,6 +23,8 @@ namespace Flare {
         pipelineCI.rendering.colorFormats = {
                 VK_FORMAT_R8G8B8A8_UNORM, // albedo
                 VK_FORMAT_R16G16_SFLOAT, // normal
+                VK_FORMAT_R8G8B8A8_UNORM, // occlusion metallic roughness
+                VK_FORMAT_R8G8B8A8_UNORM, // emissive
         };
         pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
         pipelineCI.depthStencil = {
@@ -93,6 +95,30 @@ namespace Flare {
         };
         normalTargetHandle = gpu->createTexture(normalTargetCI);
 
+        TextureCI occlusionMetallicRoughnessCI = {
+                .width = gpu->swapchainExtent.width,
+                .height = gpu->swapchainExtent.height,
+                .depth = 1,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .name = "gbuffer occlusion metallic roughness",
+                .offscreenDraw = true,
+        };
+        occlusionMetallicRoughnessTargetHandle = gpu->createTexture(occlusionMetallicRoughnessCI);
+
+        TextureCI emissiveCI = {
+                .width = gpu->swapchainExtent.width,
+                .height = gpu->swapchainExtent.height,
+                .depth = 1,
+                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .name = "gbuffer emissive",
+                .offscreenDraw = true,
+        };
+        emissiveTargetHandle = gpu->createTexture(emissiveCI);
+
         loaded = true;
     }
 
@@ -103,9 +129,11 @@ namespace Flare {
     void GBufferPass::render(VkCommandBuffer cmd) {
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
-        std::array<VkRenderingAttachmentInfo, 2> colorAttachments = {
+        std::array<VkRenderingAttachmentInfo, 4> colorAttachments = {
                 VkHelper::colorAttachment(gpu->getTexture(albedoTargetHandle)->imageView),
                 VkHelper::colorAttachment(gpu->getTexture(normalTargetHandle)->imageView),
+                VkHelper::colorAttachment(gpu->getTexture(occlusionMetallicRoughnessTargetHandle)->imageView),
+                VkHelper::colorAttachment(gpu->getTexture(emissiveTargetHandle)->imageView),
         };
 
         VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(
@@ -169,6 +197,8 @@ namespace Flare {
         gpu->destroyTexture(depthTargetHandle);
         gpu->destroyTexture(albedoTargetHandle);
         gpu->destroyTexture(normalTargetHandle);
+        gpu->destroyTexture(occlusionMetallicRoughnessTargetHandle);
+        gpu->destroyTexture(emissiveTargetHandle);
         gBufferUniformRingBuffer.shutdown();
     }
 
