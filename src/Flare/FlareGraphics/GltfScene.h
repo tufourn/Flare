@@ -48,7 +48,8 @@ namespace Flare {
 
         float metallicFactor = 1.f;
         float roughnessFactor = 1.f;
-        float pad[2];
+        float alphaCutoff = 0.5f;
+        float pad;
     };
 
     struct GltfMeshPrimitive {

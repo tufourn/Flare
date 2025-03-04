@@ -29,7 +29,13 @@ void main() {
     Material mat = materialAlias[materialIndex].materials[dd.materialOffset];
 
     TextureIndex albedoIndex = textureIndexAlias[textureIndex].textureIndices[mat.albedoTextureOffset];
-    outAlbedo = srgbToLinear(GET_TEXTURE(albedoIndex.textureIndex, albedoIndex.samplerIndex, inUV));
+    vec4 albedo = srgbToLinear(GET_TEXTURE(albedoIndex.textureIndex, albedoIndex.samplerIndex, inUV));
+
+    if (albedo.a < mat.alphaCutoff) {
+        discard;
+    }
+
+    outAlbedo = albedo;
 
     TextureIndex normalIndex = textureIndexAlias[textureIndex].textureIndices[mat.normalTextureOffset];
     vec3 normal = GET_TEXTURE(normalIndex.textureIndex, normalIndex.samplerIndex, inUV).rgb;

@@ -224,6 +224,8 @@ namespace Flare {
                 }
             }
 
+            materials[i].alphaCutoff = material.alpha_cutoff;
+
             if (material.normal_texture.texture) {
                 materials[i].normalTextureOffset = material.normal_texture.texture - data->textures;
             } else {
@@ -238,7 +240,6 @@ namespace Flare {
 
             if (material.emissive_texture.texture) {
                 materials[i].emissiveTextureOffset = material.emissive_texture.texture - data->textures;
-
                 materials[i].emissiveFactor = glm::make_vec3(material.emissive_factor);
             } else {
                 materials[i].emissiveTextureOffset = defaultMaterial.emissiveTextureOffset;

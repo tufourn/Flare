@@ -66,7 +66,8 @@ struct Material {
 
     float metallicFactor;
     float roughnessFactor;
-    float pad[2];
+    float alphaCutoff;
+    float pad;
 };
 layout(set = 1, binding = 0) readonly buffer MaterialBuffer {
     Material materials[];
