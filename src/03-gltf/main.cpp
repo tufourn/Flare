@@ -70,6 +70,17 @@ struct TriangleApp : Application {
                 .depthTestEnable = true,
                 .depthWriteEnable = true,
         };
+        pipelineCI.colorBlend.addAttachment(
+                {
+                        .srcColor = VK_BLEND_FACTOR_SRC_ALPHA,
+                        .dstColor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                        .colorOp = VK_BLEND_OP_ADD,
+                        .srcAlpha = VK_BLEND_FACTOR_ONE,
+                        .dstAlpha = VK_BLEND_FACTOR_ZERO,
+                        .alphaOp = VK_BLEND_OP_ADD,
+                        .enable = true,
+                }
+        );
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 

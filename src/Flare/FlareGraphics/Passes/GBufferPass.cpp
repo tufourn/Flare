@@ -22,6 +22,7 @@ namespace Flare {
         };
         pipelineCI.rendering.colorFormats = {
                 VK_FORMAT_R8G8B8A8_UNORM, // albedo
+                VK_FORMAT_R16G16_SFLOAT, // normal
         };
         pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
         pipelineCI.depthStencil = {
@@ -80,6 +81,18 @@ namespace Flare {
         };
         albedoTargetHandle = gpu->createTexture(albedoTargetCI);
 
+        TextureCI normalTargetCI = {
+                .width = gpu->swapchainExtent.width,
+                .height = gpu->swapchainExtent.height,
+                .depth = 1,
+                .format = VK_FORMAT_R16G16_SFLOAT, // octahedral pack
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .name = "gbuffer normal",
+                .offscreenDraw = true,
+        };
+        normalTargetHandle = gpu->createTexture(normalTargetCI);
+
         loaded = true;
     }
 
@@ -90,8 +103,9 @@ namespace Flare {
     void GBufferPass::render(VkCommandBuffer cmd) {
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
-        std::array<VkRenderingAttachmentInfo, 1> colorAttachments = {
+        std::array<VkRenderingAttachmentInfo, 2> colorAttachments = {
                 VkHelper::colorAttachment(gpu->getTexture(albedoTargetHandle)->imageView),
+                VkHelper::colorAttachment(gpu->getTexture(normalTargetHandle)->imageView),
         };
 
         VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(
@@ -154,6 +168,7 @@ namespace Flare {
     void GBufferPass::destroyRenderTargets() {
         gpu->destroyTexture(depthTargetHandle);
         gpu->destroyTexture(albedoTargetHandle);
+        gpu->destroyTexture(normalTargetHandle);
         gBufferUniformRingBuffer.shutdown();
     }
 
