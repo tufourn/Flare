@@ -292,4 +292,18 @@ namespace Flare {
             }
         }
     };
+
+    struct MeshDrawBuffers {
+        Handle<Buffer> indices;
+        Handle<Buffer> positions;
+        Handle<Buffer> uvs;
+        Handle<Buffer> normals;
+        Handle<Buffer> tangents;
+        Handle<Buffer> transforms;
+        Handle<Buffer> materials;
+        Handle<Buffer> textures;
+        Handle<Buffer> indirectDraws;
+        Handle<Buffer> count;
+        uint32_t drawCount = 0;
+    };
 }

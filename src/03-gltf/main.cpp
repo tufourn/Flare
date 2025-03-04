@@ -74,10 +74,10 @@ struct TriangleApp : Application {
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
 //        gltf.init("assets/BoxTextured.gltf", &gpu);
-//        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
+        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
-        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
+//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -90,7 +90,7 @@ struct TriangleApp : Application {
         BufferCI positionsCI = {
                 .initialData = gltf.positions.data(),
                 .size = sizeof(glm::vec4) * gltf.positions.size(),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 .name = "positions",
         };
         positionBufferHandle = gpu.createBuffer(positionsCI);
@@ -109,12 +109,12 @@ struct TriangleApp : Application {
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
                 .name = "textures",
         };
-        textureIndicesHandle = gpu.createBuffer(textureIndicesCI);
+        textureBufferHandle = gpu.createBuffer(textureIndicesCI);
 
         BufferCI uvCI = {
                 .initialData = gltf.uvs.data(),
                 .size = sizeof(glm::vec2) * gltf.uvs.size(),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 .name = "uv",
         };
         uvBufferHandle = gpu.createBuffer(uvCI);
@@ -122,7 +122,7 @@ struct TriangleApp : Application {
         BufferCI tangentCI = {
                 .initialData = gltf.tangents.data(),
                 .size = sizeof(glm::vec4) * gltf.tangents.size(),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 .name = "tangents",
         };
         tangentBufferHandle = gpu.createBuffer(tangentCI);
@@ -146,7 +146,7 @@ struct TriangleApp : Application {
         BufferCI normalCI = {
                 .initialData = gltf.normals.data(),
                 .size = sizeof(glm::vec4) * gltf.normals.size(),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                 .name = "normals",
         };
         normalBufferHandle = gpu.createBuffer(normalCI);
@@ -170,7 +170,7 @@ struct TriangleApp : Application {
         BufferCI indirectCountCI = {
                 .size = sizeof(uint32_t),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-                .readback = true,
+                .mapped = true,
                 .name = "indirectCount",
         };
         countBufferHandle = gpu.createBuffer(indirectCountCI);
@@ -196,7 +196,7 @@ struct TriangleApp : Application {
         globals.uvBufferIndex = uvBufferHandle.index;
         globals.transformBufferIndex = transformBufferHandle.index;
 
-        globals.textureBufferIndex = textureIndicesHandle.index;
+        globals.textureBufferIndex = textureBufferHandle.index;
         globals.materialBufferIndex = materialBufferHandle.index;
         globals.tangentBufferIndex = tangentBufferHandle.index;
 
@@ -227,14 +227,14 @@ struct TriangleApp : Application {
         while (!window.shouldClose()) {
             window.newFrame();
 
-            if (window.shouldResize) {
-                window.shouldResize = false;
-
-                gpu.resizeSwapchain();
-                gBufferPass.genRenderTargets(window.width, window.height);
-            }
-
             if (!window.isMinimized()) {
+                if (window.shouldResize) {
+                    window.shouldResize = false;
+
+                    gpu.resizeSwapchain();
+                    gBufferPass.generateRenderTargets();
+                }
+
                 camera.update();
                 camera.setAspectRatio((float) window.width / window.height);
 
@@ -257,9 +257,13 @@ struct TriangleApp : Application {
                     bounds[i] = md.bounds;
                 }
 
+                uint32_t meshCount = indirectDrawDatas.size();
                 memcpy(gpu.getBuffer(indirectDrawDataBufferHandle)->allocationInfo.pMappedData,
                        indirectDrawDatas.data(),
                        sizeof(IndirectDrawData) * indirectDrawDatas.size());
+                memcpy(gpu.getBuffer(countBufferHandle)->allocationInfo.pMappedData,
+                       &meshCount,
+                       sizeof(uint32_t));
                 memcpy(gpu.getBuffer(boundsBufferHandle)->allocationInfo.pMappedData, bounds.data(),
                        sizeof(Bounds) * bounds.size());
 
@@ -273,49 +277,71 @@ struct TriangleApp : Application {
 
                 glm::mat4 view = camera.getViewMatrix();
                 glm::mat4 projection = camera.getProjectionMatrix();
-                globals.mvp = projection * view;
-                globals.lightSpaceMatrix = lightSpaceMatrix;
-                globals.cameraPos = glm::vec4(camera.position, 1.0);
+                gpu.newFrame();
+                imgui.newFrame();
 
-                if (shouldFrustumCull) {
-                    globals.indirectDrawDataBufferIndex = culledIndirectDrawDataBufferHandle.index;
-                } else {
-                    globals.indirectDrawDataBufferIndex = indirectDrawDataBufferHandle.index;
-                }
-
-                gpu.uploadBufferData(globalsRingBuffer.buffer(), &globals);
-
-                // shadows
+                // todo: frustum cull for shadows
+                // update shadows uniforms
                 shadowPass.setBuffers(indirectDrawDataBufferHandle, positionBufferHandle, transformBufferHandle);
                 shadowPass.uniforms.lightSpaceMatrix = lightSpaceMatrix;
                 shadowPass.updateUniforms();
 
                 // frustum cull
-                if (!fixedFrustum) {
-                    frustumCullPass.uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(projection * view);
+                Handle<Buffer> chosenIndirectDrawBufferHandle = indirectDrawDataBufferHandle;
+                if (shouldFrustumCull) {
+                    chosenIndirectDrawBufferHandle = culledIndirectDrawDataBufferHandle;
+                    if (!fixedFrustum) {
+                        frustumCullPass.uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(projection * view);
+                    }
+                    frustumCullPass.updateUniforms();
+                    frustumCullPass.setBuffers(indirectDrawDataBufferHandle, culledIndirectDrawDataBufferHandle,
+                                               countBufferHandle, transformBufferHandle, boundsBufferHandle);
                 }
-                frustumCullPass.updateUniforms();
-                frustumCullPass.setBuffers(indirectDrawDataBufferHandle, culledIndirectDrawDataBufferHandle,
-                                           countBufferHandle, transformBufferHandle, boundsBufferHandle);
+
+                // gbuffer
+                MeshDrawBuffers meshDrawBuffers = {
+                        .indices = indexBufferHandle,
+                        .positions = positionBufferHandle,
+                        .uvs = uvBufferHandle,
+                        .normals = normalBufferHandle,
+                        .tangents = tangentBufferHandle,
+                        .transforms = transformBufferHandle,
+                        .materials = materialBufferHandle,
+                        .textures = textureBufferHandle,
+                        .indirectDraws = chosenIndirectDrawBufferHandle,
+                        .count = countBufferHandle,
+                        .drawCount = static_cast<uint32_t>(indirectDrawDatas.size()),
+                };
+                gBufferPass.setBuffers(meshDrawBuffers);
+
+                gBufferPass.updateViewProjection(projection * view);
+
+                globals.mvp = projection * view;
+                globals.lightSpaceMatrix = lightSpaceMatrix;
+                globals.cameraPos = glm::vec4(camera.position, 1.0);
+                globals.indirectDrawDataBufferIndex = chosenIndirectDrawBufferHandle.index;
+
+                gpu.uploadBufferData(globalsRingBuffer.buffer(), &globals);
 
                 PushConstants pc = {
                         .uniformOffset = globalsRingBuffer.buffer().index,
                 };
 
-                gpu.newFrame();
-                imgui.newFrame();
-
                 VkCommandBuffer cmd = gpu.getCommandBuffer();
 
-                // todo: frustum cull for shadows
+                // frustum cull
+                if (shouldFrustumCull) {
+                    //todo: implement compute queue, currently using the main queue here
+                    frustumCullPass.cull(cmd);
+                }
+                frustumCullPass.addBarriers(cmd, gpu.mainFamily, gpu.mainFamily);
+
+                // shadows
                 shadowPass.render(cmd,
                                   indexBufferHandle,
                                   indirectDrawDataBufferHandle, indirectDrawDatas.size());
 
-                //todo: implement compute queue, currently using the main queue here
-                frustumCullPass.cull(cmd);
-                frustumCullPass.addBarriers(cmd, gpu.mainFamily, gpu.mainFamily);
-
+                // gbuffer pass
                 gBufferPass.render(cmd);
 
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
@@ -351,18 +377,11 @@ struct TriangleApp : Application {
                 vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
                                    &pc);
 
-                if (shouldFrustumCull) {
-                    vkCmdDrawIndexedIndirectCount(cmd,
-                                                  gpu.getBuffer(culledIndirectDrawDataBufferHandle)->buffer, 0,
-                                                  gpu.getBuffer(countBufferHandle)->buffer, 0,
-                                                  gltf.meshDraws.size(),
-                                                  sizeof(IndirectDrawData));
-
-                } else {
-                    vkCmdDrawIndexedIndirect(cmd, gpu.getBuffer(indirectDrawDataBufferHandle)->buffer, 0,
-                                             gltf.meshDraws.size(),
-                                             sizeof(IndirectDrawData));
-                }
+                vkCmdDrawIndexedIndirectCount(cmd,
+                                              gpu.getBuffer(chosenIndirectDrawBufferHandle)->buffer, 0,
+                                              gpu.getBuffer(countBufferHandle)->buffer, 0,
+                                              gltf.meshDraws.size(),
+                                              sizeof(IndirectDrawData));
 
                 if (shouldRenderSkybox) {
                     skyboxPass.render(cmd, projection, view);
@@ -370,14 +389,7 @@ struct TriangleApp : Application {
 
                 vkCmdEndRendering(cmd);
 
-                uint32_t drawCount = *reinterpret_cast<uint32_t *>(gpu.getBuffer(
-                        countBufferHandle)->allocationInfo.pMappedData);
                 ImGui::Begin("Options");
-                if (shouldFrustumCull) {
-                    ImGui::Text("Draw count: %i (culled %zu)", drawCount, indirectDrawDatas.size() - drawCount);
-                } else {
-                    ImGui::Text("Draw count: %zu", indirectDrawDatas.size());
-                }
                 ImGui::Checkbox("Shadows", &shadowPass.enable);
                 ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
                 ImGui::Checkbox("Fixed frustum", &fixedFrustum);
@@ -405,6 +417,7 @@ struct TriangleApp : Application {
 
                 if (shouldReloadPipeline) {
                     gpu.recreatePipeline(pipelineHandle, pipelineCI);
+                    gpu.recreatePipeline(gBufferPass.pipelineHandle, gBufferPass.pipelineCI);
                     shouldReloadPipeline = false;
                 }
             }
@@ -430,7 +443,7 @@ struct TriangleApp : Application {
         gpu.destroyBuffer(indexBufferHandle);
         gpu.destroyBuffer(transformBufferHandle);
         gpu.destroyBuffer(uvBufferHandle);
-        gpu.destroyBuffer(textureIndicesHandle);
+        gpu.destroyBuffer(textureBufferHandle);
         gpu.destroyBuffer(materialBufferHandle);
         gpu.destroyBuffer(normalBufferHandle);
         gpu.destroyBuffer(indirectDrawDataBufferHandle);
@@ -461,7 +474,7 @@ struct TriangleApp : Application {
     Handle<Buffer> transformBufferHandle;
     Handle<Buffer> uvBufferHandle;
     Handle<Buffer> tangentBufferHandle;
-    Handle<Buffer> textureIndicesHandle;
+    Handle<Buffer> textureBufferHandle;
     Handle<Buffer> materialBufferHandle;
     Handle<Buffer> normalBufferHandle;
 

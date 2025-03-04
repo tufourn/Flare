@@ -351,4 +351,12 @@ namespace VkHelper {
         return renderingInfo(extent.width, extent.height, colorAttachmentCount,
                              colorAttachment, depthAttachment, stencilAttachment);
     }
+
+    VkViewport VkHelper::viewport(VkExtent2D extent) {
+        return viewport(extent.width, extent.height);
+    }
+
+    VkRect2D VkHelper::scissor(VkExtent2D extent) {
+        return scissor(extent.width, extent.height);
+    }
 }

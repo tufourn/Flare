@@ -9,7 +9,11 @@ namespace VkHelper {
 
     VkImageSubresourceRange subresourceRange(bool depth = false);
 
+    VkViewport viewport(VkExtent2D extent);
+
     VkViewport viewport(float width, float height);
+
+    VkRect2D scissor(VkExtent2D extent);
 
     VkRect2D scissor(float width, float height);
 

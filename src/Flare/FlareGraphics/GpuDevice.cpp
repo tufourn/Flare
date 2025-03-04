@@ -1176,11 +1176,11 @@ namespace Flare {
         VmaAllocationCreateInfo allocCI = {.usage = VMA_MEMORY_USAGE_AUTO};
 
         if (ci.mapped) {
-            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            allocCI.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
         if (ci.readback) {
-            allocCI.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            allocCI.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
         }
 
         vmaCreateBuffer(allocator, &bufferCI, &allocCI, &buffer->buffer, &buffer->allocation,
