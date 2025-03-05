@@ -42,4 +42,10 @@ namespace Flare {
             );
         }
     }
+
+    void CameraData::setMatrices(glm::mat4 view, glm::mat4 projection) {
+        viewProjection = projection * view;
+        viewProjectionInv = glm::inverse(viewProjection);
+        viewInv = glm::inverse(view);
+    }
 }

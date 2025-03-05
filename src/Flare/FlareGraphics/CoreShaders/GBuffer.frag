@@ -29,7 +29,7 @@ void main() {
     Material mat = materialAlias[materialIndex].materials[dd.materialOffset];
 
     TextureIndex albedoIndex = textureIndexAlias[textureIndex].textureIndices[mat.albedoTextureOffset];
-    vec4 albedo = srgbToLinear(GET_TEXTURE(albedoIndex.textureIndex, albedoIndex.samplerIndex, inUV));
+    vec4 albedo = srgbToLinear(GET_TEXTURE(albedoIndex.textureIndex, albedoIndex.samplerIndex, inUV)) * mat.albedoFactor;
 
     if (albedo.a < mat.alphaCutoff) {
         discard;
@@ -46,9 +46,9 @@ void main() {
     TextureIndex occlusionIndex = textureIndexAlias[textureIndex].textureIndices[mat.occlusionTextureOffset];
     float occlusion = GET_TEXTURE(occlusionIndex.textureIndex, occlusionIndex.samplerIndex, inUV).r;
 
-    outOcclusionMetallicRoughness.r = occlusion;
-    outOcclusionMetallicRoughness.g = metallicRoughness.b;
-    outOcclusionMetallicRoughness.b = metallicRoughness.g;
+    outOcclusionMetallicRoughness.r = occlusion; // occlusion
+    outOcclusionMetallicRoughness.g = mat.metallicFactor * metallicRoughness.b; // metallic
+    outOcclusionMetallicRoughness.b = clamp(mat.roughnessFactor * metallicRoughness.g, 0.089, 1.0); // roughness
 
     vec3 emissive = mat.emissiveFactor;
     TextureIndex emissiveIndex = textureIndexAlias[textureIndex].textureIndices[mat.emissiveTextureOffset];

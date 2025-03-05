@@ -104,6 +104,13 @@ struct Light {
 };
 layout (set = 0, binding = 0) uniform LightBuffer { Light light; } lightAlias[];
 
+struct Camera {
+    mat4 viewProjection;
+    mat4 viewProjectionInv;
+    mat4 viewInv;
+};
+layout (set = 0, binding = 0) uniform CameraBuffer { Camera camera; } cameraAlias[];
+
 const uint DEFAULT_SAMPLER_INDEX = 0;
 
 const float PI = 3.141592653589;

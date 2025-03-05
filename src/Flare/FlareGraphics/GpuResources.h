@@ -306,4 +306,12 @@ namespace Flare {
         Handle<Buffer> count;
         uint32_t drawCount = 0;
     };
+
+    struct CameraData {
+        glm::mat4 viewProjection;
+        glm::mat4 viewProjectionInv;
+        glm::mat4 viewInv;
+
+        void setMatrices(glm::mat4 view, glm::mat4 projection);
+    };
 }

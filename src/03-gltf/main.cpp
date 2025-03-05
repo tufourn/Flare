@@ -14,6 +14,7 @@
 #include "FlareGraphics/Passes/SkyboxPass.h"
 #include "FlareGraphics/Passes/GBufferPass.h"
 #include "FlareGraphics/LightData.h"
+#include "FlareGraphics/Passes/LightingPass.h"
 
 using namespace Flare;
 
@@ -80,9 +81,9 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-//        gltf.init("assets/BoxTextured.gltf", &gpu);
+        gltf.init("assets/BoxTextured.gltf", &gpu);
 //        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
-        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
+//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
 //        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
@@ -199,12 +200,21 @@ struct TriangleApp : Application {
         };
         lightDataRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, lightCI);
 
+        BufferCI cameraCI = {
+                .size = sizeof(CameraData),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .name = "lightData",
+                .bufferType = BufferType::eUniform,
+        };
+        cameraDataRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, cameraCI);
+
         shadowPass.init(&gpu);
         frustumCullPass.init(&gpu);
         skyboxPass.init(&gpu);
         skyboxPass.loadImage("assets/AllSkyFree_Sky_EpicBlueSunset_Equirect.png");
 //        skyboxPass.loadImage("assets/free_hdri_sky_816.jpg");
         gBufferPass.init(&gpu);
+        lightingPass.init(&gpu);
 
         globals.positionBufferIndex = positionBufferHandle.index;
         globals.normalBufferIndex = normalBufferHandle.index;
@@ -241,6 +251,7 @@ struct TriangleApp : Application {
 
                     gpu.resizeSwapchain();
                     gBufferPass.generateRenderTargets();
+                    lightingPass.generateRenderTarget();
                 }
 
                 camera.update();
@@ -285,6 +296,10 @@ struct TriangleApp : Application {
                 lightData.updateViewProjection();
                 gpu.uploadBufferData(lightDataRingBuffer.buffer(), &lightData);
 
+                // camera
+                cameraData.setMatrices(view, projection);
+                gpu.uploadBufferData(cameraDataRingBuffer.buffer(), &cameraData);
+
                 // todo: frustum cull for shadows
                 // shadows
                 shadowPass.setBuffers(indirectDrawDataBufferHandle, positionBufferHandle, transformBufferHandle,
@@ -319,6 +334,15 @@ struct TriangleApp : Application {
                 gBufferPass.setBuffers(meshDrawBuffers);
                 gBufferPass.updateViewProjection(projection * view);
 
+                // lighting
+                lightingPass.inputs.cameraBuffer = cameraDataRingBuffer.buffer();
+                lightingPass.inputs.lightBuffer = lightDataRingBuffer.buffer();
+                lightingPass.inputs.gBufferAlbedo = gBufferPass.albedoTargetHandle;
+                lightingPass.inputs.gBufferNormal = gBufferPass.normalTargetHandle;
+                lightingPass.inputs.gBufferOcclusionMetallicRoughness = gBufferPass.occlusionMetallicRoughnessTargetHandle;
+                lightingPass.inputs.gBufferEmissive = gBufferPass.emissiveTargetHandle;
+                lightingPass.inputs.gBufferDepth = gBufferPass.depthTargetHandle;
+
                 globals.mvp = projection * view;
                 globals.cameraPos = glm::vec4(camera.position, 1.0);
                 globals.indirectDrawDataBufferIndex = chosenIndirectDrawBufferHandle.index;
@@ -347,50 +371,66 @@ struct TriangleApp : Application {
                 // gbuffer pass
                 gBufferPass.render(cmd);
 
+                // lighting pass
+                lightingPass.render(cmd);
+
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
                                           VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+                VkHelper::copyImageToImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
+                                           gpu.swapchainImages[gpu.swapchainImageIndex],
+                                           gpu.swapchainExtent, gpu.swapchainExtent);
+
+                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-                VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(
-                        gpu.swapchainImageViews[gpu.swapchainImageIndex]);
 
-                VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(
-                        gpu.getTexture(gpu.depthTextures[gpu.swapchainImageIndex])->imageView);
-
-                VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu.swapchainExtent, 1,
-                                                                        &colorAttachment,
-                                                                        &depthAttachment);
-
-                Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
-
-                vkCmdBeginRendering(cmd, &renderingInfo);
-                vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
-
-                vkCmdBindIndexBuffer(cmd, gpu.getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
-                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
-                                        gpu.bindlessDescriptorSets.size(), gpu.bindlessDescriptorSets.data(),
-                                        0, nullptr);
-
-                VkViewport viewport = VkHelper::viewport(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
-                vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-                VkRect2D scissor = VkHelper::scissor(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
-                vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-                vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
-                                   &pc);
-
-                vkCmdDrawIndexedIndirectCount(cmd,
-                                              gpu.getBuffer(chosenIndirectDrawBufferHandle)->buffer, 0,
-                                              gpu.getBuffer(countBufferHandle)->buffer, 0,
-                                              gltf.meshDraws.size(),
-                                              sizeof(IndirectDrawData));
-
-                if (shouldRenderSkybox) {
-                    skyboxPass.render(cmd, projection, view);
-                }
-
-                vkCmdEndRendering(cmd);
+//                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+//                                          VK_IMAGE_LAYOUT_UNDEFINED,
+//                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+//
+//                VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(
+//                        gpu.swapchainImageViews[gpu.swapchainImageIndex]);
+//
+//                VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(
+//                        gpu.getTexture(gpu.depthTextures[gpu.swapchainImageIndex])->imageView);
+//
+//                VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu.swapchainExtent, 1,
+//                                                                        &colorAttachment,
+//                                                                        &depthAttachment);
+//
+//                Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
+//
+//                vkCmdBeginRendering(cmd, &renderingInfo);
+//                vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
+//
+//                vkCmdBindIndexBuffer(cmd, gpu.getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
+//                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
+//                                        gpu.bindlessDescriptorSets.size(), gpu.bindlessDescriptorSets.data(),
+//                                        0, nullptr);
+//
+//                VkViewport viewport = VkHelper::viewport(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
+//                vkCmdSetViewport(cmd, 0, 1, &viewport);
+//
+//                VkRect2D scissor = VkHelper::scissor(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
+//                vkCmdSetScissor(cmd, 0, 1, &scissor);
+//
+//                vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
+//                                   &pc);
+//
+//                vkCmdDrawIndexedIndirectCount(cmd,
+//                                              gpu.getBuffer(chosenIndirectDrawBufferHandle)->buffer, 0,
+//                                              gpu.getBuffer(countBufferHandle)->buffer, 0,
+//                                              gltf.meshDraws.size(),
+//                                              sizeof(IndirectDrawData));
+//
+//                if (shouldRenderSkybox) {
+//                    skyboxPass.render(cmd, projection, view);
+//                }
+//
+//                vkCmdEndRendering(cmd);
 
                 ImGui::Begin("Options");
                 ImGui::Checkbox("Shadows", &shadowPass.enable);
@@ -416,12 +456,13 @@ struct TriangleApp : Application {
 
                 globalsRingBuffer.moveToNextBuffer();
                 lightDataRingBuffer.moveToNextBuffer();
+                cameraDataRingBuffer.moveToNextBuffer();
 
                 gpu.present();
 
                 if (shouldReloadPipeline) {
                     gpu.recreatePipeline(pipelineHandle, pipelineCI);
-                    gpu.recreatePipeline(gBufferPass.pipelineHandle, gBufferPass.pipelineCI);
+                    gpu.recreatePipeline(lightingPass.pipelineHandle, lightingPass.pipelineCI);
                     shouldReloadPipeline = false;
                 }
             }
@@ -435,6 +476,7 @@ struct TriangleApp : Application {
         frustumCullPass.shutdown();
         skyboxPass.shutdown();
         gBufferPass.shutdown();
+        lightingPass.shutdown();
 
         imgui.shutdown();
 
@@ -442,6 +484,7 @@ struct TriangleApp : Application {
 
         globalsRingBuffer.shutdown();
         lightDataRingBuffer.shutdown();
+        cameraDataRingBuffer.shutdown();
 
         gpu.destroyPipeline(pipelineHandle);
         gpu.destroyBuffer(positionBufferHandle);
@@ -478,6 +521,9 @@ struct TriangleApp : Application {
     LightData lightData;
     RingBuffer lightDataRingBuffer;
 
+    CameraData cameraData;
+    RingBuffer cameraDataRingBuffer;
+
     Handle<Buffer> positionBufferHandle;
     Handle<Buffer> indexBufferHandle;
     Handle<Buffer> transformBufferHandle;
@@ -506,6 +552,7 @@ struct TriangleApp : Application {
     FrustumCullPass frustumCullPass;
     SkyboxPass skyboxPass;
     GBufferPass gBufferPass;
+    LightingPass lightingPass;
 };
 
 int main() {

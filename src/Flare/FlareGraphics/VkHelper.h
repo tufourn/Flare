@@ -52,5 +52,7 @@ namespace VkHelper {
                                   VkRenderingAttachmentInfo *colorAttachment = nullptr,
                                   VkRenderingAttachmentInfo *depthAttachment = nullptr,
                                   VkRenderingAttachmentInfo *stencilAttachment = nullptr);
+
+    void copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize);
 }
 

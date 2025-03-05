@@ -359,4 +359,37 @@ namespace VkHelper {
     VkRect2D VkHelper::scissor(VkExtent2D extent) {
         return scissor(extent.width, extent.height);
     }
+
+    void copyImageToImage(VkCommandBuffer cmd, VkImage src, VkImage dst, VkExtent2D srcSize, VkExtent2D dstSize) {
+        VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr};
+
+        blitRegion.srcOffsets[1].x = static_cast<int>(srcSize.width);
+        blitRegion.srcOffsets[1].y = static_cast<int>(srcSize.height);
+        blitRegion.srcOffsets[1].z = 1;
+
+        blitRegion.dstOffsets[1].x = static_cast<int>(dstSize.width);
+        blitRegion.dstOffsets[1].y = static_cast<int>(dstSize.height);
+        blitRegion.dstOffsets[1].z = 1;
+
+        blitRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.srcSubresource.baseArrayLayer = 0;
+        blitRegion.srcSubresource.layerCount = 1;
+        blitRegion.srcSubresource.mipLevel = 0;
+
+        blitRegion.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blitRegion.dstSubresource.baseArrayLayer = 0;
+        blitRegion.dstSubresource.layerCount = 1;
+        blitRegion.dstSubresource.mipLevel = 0;
+
+        VkBlitImageInfo2 blitInfo{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2, .pNext = nullptr};
+        blitInfo.dstImage = dst;
+        blitInfo.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        blitInfo.srcImage = src;
+        blitInfo.srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        blitInfo.filter = VK_FILTER_LINEAR;
+        blitInfo.regionCount = 1;
+        blitInfo.pRegions = &blitRegion;
+
+        vkCmdBlitImage2(cmd, &blitInfo);
+    }
 }
