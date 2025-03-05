@@ -5,18 +5,8 @@
 
 #include "CoreShaders/BindlessCommon.glsl"
 
-struct Light {
-    vec3 position;
-    float radius;
-    vec3 color;
-    float intensity;
-};
-
 struct Globals {
     mat4 mvp;
-    mat4 lightSpaceMatrix;
-
-    Light light;
 
     vec4 cameraPos;
 
@@ -55,6 +45,10 @@ layout (location = 3) out mat3 outTBN;
 layout (location = 6) out vec4 outFragLightSpace;
 
 void main() {
+    uint lightBufferIndex = pc.data0;
+
+    Light light = lightAlias[lightBufferIndex].light;
+
     Globals glob = globalBuffer[pc.uniformOffset].globals;
 
     IndirectDrawData dd = indirectDrawDataAlias[glob.indirectDrawDataBufferIndex].indirectDrawDatas[gl_DrawID];
@@ -73,5 +67,5 @@ void main() {
     outFragPos = position.xyz;
     outUV = uvAlias[glob.uvBufferIndex].uvs[gl_VertexIndex];
     outDrawID = gl_DrawID;
-    outFragLightSpace = biasMat * glob.lightSpaceMatrix * position;
+    outFragLightSpace = biasMat * light.lightViewProjection * position;
 }

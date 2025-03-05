@@ -78,7 +78,7 @@ namespace Flare {
         offscreenPipelineCI.rendering.colorFormats.push_back(VK_FORMAT_R32G32B32A32_SFLOAT);
 
         offscreenPipelineCI.shaderStages = {
-                ShaderStage{"CoreShaders/BrdfLut.vert", VK_SHADER_STAGE_VERTEX_BIT},
+                ShaderStage{"CoreShaders/FullscreenTriangle.vert", VK_SHADER_STAGE_VERTEX_BIT},
                 ShaderStage{"CoreShaders/BrdfLut.frag", VK_SHADER_STAGE_FRAGMENT_BIT},
         };
         brdfLutPipelineHandle = gpu->createPipeline(offscreenPipelineCI);

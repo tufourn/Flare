@@ -52,14 +52,6 @@ namespace Flare {
                 }
         };
         pipelineHandle = gpu->createPipeline(pipelineCI);
-
-        BufferCI shadowUniformBufferCI = {
-                .size = sizeof(ShadowUniform),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .name = "shadowUniforms",
-                .bufferType = BufferType::eUniform,
-        };
-        shadowUniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, shadowUniformBufferCI);
     }
 
     void ShadowPass::shutdown() {
@@ -72,7 +64,6 @@ namespace Flare {
         if (pipelineHandle.isValid()) {
             gpu->destroyPipeline(pipelineHandle);
         }
-        shadowUniformRingBuffer.shutdown();
     }
 
     void ShadowPass::render(VkCommandBuffer cmd,
@@ -80,8 +71,6 @@ namespace Flare {
                             Handle<Buffer> indirectDrawBuffer, uint32_t count) {
         Texture *texture = gpu->getTexture(depthTextureHandle);
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
-
-        pc.uniformOffset = shadowUniformRingBuffer.buffer().index;
 
         VkHelper::transitionImage(cmd, texture->image,
                                   VK_IMAGE_LAYOUT_UNDEFINED,
@@ -121,15 +110,11 @@ namespace Flare {
                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
     }
 
-    void ShadowPass::updateUniforms() {
-        shadowUniformRingBuffer.moveToNextBuffer();
-        gpu->uploadBufferData(shadowUniformRingBuffer.buffer(), &uniforms);
-    }
-
     void ShadowPass::setBuffers(Handle<Buffer> indirectBuffer, Handle<Buffer> positionBuffer,
-                                Handle<Buffer> transformBuffer) {
+                                Handle<Buffer> transformBuffer, Handle<Buffer> lightBuffer) {
         pc.data0 = indirectBuffer.index;
         pc.data1 = positionBuffer.index;
         pc.data2 = transformBuffer.index;
+        pc.data3 = lightBuffer.index;
     }
 }

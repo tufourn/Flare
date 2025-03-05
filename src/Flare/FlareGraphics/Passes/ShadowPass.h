@@ -8,18 +8,13 @@ namespace Flare {
 
     static constexpr uint32_t SHADOW_RESOLUTION = 2048;
 
-    struct ShadowUniform {
-        glm::mat4 lightSpaceMatrix;
-    };
-
     struct ShadowPass {
         void init(GpuDevice *gpuDevice);
 
         void shutdown();
 
-        void updateUniforms();
-
-        void setBuffers(Handle<Buffer> indirectBuffer, Handle<Buffer> positionBuffer, Handle<Buffer> transformBuffer);
+        void setBuffers(Handle<Buffer> indirectBuffer, Handle<Buffer> positionBuffer, Handle<Buffer> transformBuffer,
+                        Handle<Buffer> lightBuffer);
 
         void render(VkCommandBuffer cmd,
                     Handle<Buffer> indexBuffer,
@@ -35,9 +30,6 @@ namespace Flare {
 
         PipelineCI pipelineCI;
         Handle<Pipeline> pipelineHandle;
-
-        ShadowUniform uniforms;
-        RingBuffer shadowUniformRingBuffer;
 
         PushConstants pc;
     };

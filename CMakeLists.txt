@@ -189,6 +189,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/BasicGeometry.h
         src/Flare/FlareGraphics/Passes/GBufferPass.cpp
         src/Flare/FlareGraphics/Passes/GBufferPass.h
+        src/Flare/FlareGraphics/LightData.cpp
+        src/Flare/FlareGraphics/LightData.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal

@@ -96,6 +96,16 @@ struct Bounds {
     float pad;
 };
 
+struct Light {
+    mat4 lightViewProjection;
+    vec4 lightPos;
+    vec4 lightDir;
+    vec4 lightColor;
+};
+layout (set = 0, binding = 0) uniform LightBuffer { Light light; } lightAlias[];
+
+const uint DEFAULT_SAMPLER_INDEX = 0;
+
 const float PI = 3.141592653589;
 
 #endif

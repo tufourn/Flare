@@ -16,18 +16,8 @@ layout (location = 6) in vec4 inFragLightSpace;
 
 layout (location = 0) out vec4 outColor;
 
-struct Light {
-    vec3 position;
-    float radius;
-    vec3 color;
-    float intensity;
-};
-
 struct Globals {
     mat4 mvp;
-    mat4 lightSpaceMatrix;
-
-    Light light;
 
     vec4 cameraPos;
 
@@ -147,12 +137,14 @@ float filterPCF(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shado
 }
 
 void main() {
+    uint lightBufferIndex = pc.data0;
+
     Globals glob = globalBuffer[pc.uniformOffset].globals;
     IndirectDrawData dd = indirectDrawDataAlias[glob.indirectDrawDataBufferIndex].indirectDrawDatas[inDrawID];
 
-    vec3 lightPos = glob.light.position;
-    vec3 lightColor = glob.light.color;
-    float lightIntensity = glob.light.intensity;
+    Light light = lightAlias[lightBufferIndex].light;
+
+    vec3 lightPos = light.lightPos.xyz;
 
     Material mat = materialAlias[glob.materialBufferIndex].materials[dd.materialOffset];
 
@@ -231,7 +223,8 @@ void main() {
     vec3 specularContrib = F * G * D / (4.0 * NoL * NoV);
 
     float shadow = filterPCF(inFragLightSpace, glob.shadowDepthTextureIndex, glob.shadowSamplerIndex);
-    vec3 color = NoL * lightIntensity * lightColor * (diffuseContrib + specularContrib) * shadow;
+//    vec3 color = NoL * lightIntensity * lightColor * (diffuseContrib + specularContrib) * shadow;
+    vec3 color = NoL * (diffuseContrib + specularContrib) * shadow;
 
     color += getIblContribution(pbrInfo, N, reflection);
 
