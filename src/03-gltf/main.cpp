@@ -81,11 +81,11 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-//        gltf.init("assets/BoxTextured.gltf", &gpu);
+        gltf.init("assets/BoxTextured.gltf", &gpu);
 //        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
-        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
+//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -335,13 +335,20 @@ struct TriangleApp : Application {
                 gBufferPass.updateViewProjection(projection * view);
 
                 // lighting
-                lightingPass.inputs.cameraBuffer = cameraDataRingBuffer.buffer();
-                lightingPass.inputs.lightBuffer = lightDataRingBuffer.buffer();
-                lightingPass.inputs.gBufferAlbedo = gBufferPass.albedoTargetHandle;
-                lightingPass.inputs.gBufferNormal = gBufferPass.normalTargetHandle;
-                lightingPass.inputs.gBufferOcclusionMetallicRoughness = gBufferPass.occlusionMetallicRoughnessTargetHandle;
-                lightingPass.inputs.gBufferEmissive = gBufferPass.emissiveTargetHandle;
-                lightingPass.inputs.gBufferDepth = gBufferPass.depthTargetHandle;
+                LightingPassInputs lightingPassInputs = {
+                        .cameraBuffer = cameraDataRingBuffer.buffer(),
+                        .lightBuffer = lightDataRingBuffer.buffer(),
+
+                        .gBufferAlbedo = gBufferPass.albedoTargetHandle,
+                        .gBufferNormal = gBufferPass.normalTargetHandle,
+                        .gBufferOcclusionMetallicRoughness = gBufferPass.occlusionMetallicRoughnessTargetHandle,
+                        .gBufferEmissive = gBufferPass.emissiveTargetHandle,
+                        .gBufferDepth = gBufferPass.depthTargetHandle,
+
+                        .shadowMap = shadowPass.depthTextureHandle,
+                        .shadowSampler = shadowPass.samplerHandle,
+                };
+                lightingPass.setInputs(lightingPassInputs);
 
                 globals.mvp = projection * view;
                 globals.cameraPos = glm::vec4(camera.position, 1.0);

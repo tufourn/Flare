@@ -15,6 +15,14 @@ namespace Flare {
         };
         pipelineHandle = gpu->createPipeline(pipelineCI);
 
+        BufferCI uniformCI = {
+                .size = sizeof(LightingPassUniform),
+                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                .name = "lighting pass",
+                .bufferType = BufferType::eUniform,
+        };
+        uniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, uniformCI);
+
         generateRenderTarget();
 
         loaded = true;
@@ -23,6 +31,7 @@ namespace Flare {
     void LightingPass::shutdown() {
         destroyRenderTarget();
         gpu->destroyPipeline(pipelineHandle);
+        uniformRingBuffer.shutdown();
     }
 
     void LightingPass::generateRenderTarget() {
@@ -54,15 +63,6 @@ namespace Flare {
         VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(gpu->getTexture(targetHandle)->imageView);
         VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu->swapchainExtent, 1, &colorAttachment);
 
-        PushConstants pc {};
-        pc.data0 = inputs.cameraBuffer.index;
-        pc.data1 = inputs.lightBuffer.index;
-        pc.data2 = inputs.gBufferAlbedo.index;
-        pc.data3 = inputs.gBufferNormal.index;
-        pc.data4 = inputs.gBufferOcclusionMetallicRoughness.index;
-        pc.data5 = inputs.gBufferEmissive.index;
-        pc.data6 = inputs.gBufferDepth.index;
-
         VkHelper::transitionImage(cmd, gpu->getTexture(targetHandle)->image,
                                   VK_IMAGE_LAYOUT_UNDEFINED,
                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -85,5 +85,24 @@ namespace Flare {
         vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
 
         vkCmdEndRendering(cmd);
+    }
+
+    void LightingPass::setInputs(const LightingPassInputs &inputs) {
+        uniformRingBuffer.moveToNextBuffer();
+
+        pc.uniformOffset = uniformRingBuffer.buffer().index;
+        pc.data0 = inputs.cameraBuffer.index;
+        pc.data1 = inputs.lightBuffer.index;
+
+        uniforms.gBufferAlbedoIndex = inputs.gBufferAlbedo.index;
+        uniforms.gBufferNormalIndex = inputs.gBufferNormal.index;
+        uniforms.gBufferOcclusionMetallicRoughnessIndex = inputs.gBufferOcclusionMetallicRoughness.index;
+        uniforms.gBufferEmissiveIndex = inputs.gBufferEmissive.index;
+        uniforms.gBufferDepthIndex = inputs.gBufferDepth.index;
+
+        uniforms.shadowMapIndex = inputs.shadowMap.index;
+        uniforms.shadowSamplerIndex = inputs.shadowSampler.index;
+
+        gpu->uploadBufferData(uniformRingBuffer.buffer(), &uniforms);
     }
 }

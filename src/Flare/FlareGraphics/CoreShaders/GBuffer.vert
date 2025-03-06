@@ -35,9 +35,11 @@ void main() {
 
     mat4 transform = transformAlias[transformBufferIndex].transforms[dd.transformOffset];
 
-    outClipSpacePos = uniforms.viewProjection * transform * inPos;
-    outPrevClipSpacePos = uniforms.prevViewProjection * transform * inPos;
-    outModelSpacePos = inPos.xyz;
+    vec4 pos = transform * inPos;
+
+    outClipSpacePos = uniforms.viewProjection * pos;
+    outPrevClipSpacePos = uniforms.prevViewProjection * pos;
+    outModelSpacePos = pos.xyz;
     gl_Position = outClipSpacePos;
 
     vec3 normal = normalize(mat3(transpose(inverse(transform))) * inNormal.xyz);

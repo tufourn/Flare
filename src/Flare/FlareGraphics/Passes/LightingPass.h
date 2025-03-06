@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../GpuResources.h"
+#include "../RingBuffer.h"
 
 namespace Flare {
     struct GpuDevice;
@@ -14,12 +15,26 @@ namespace Flare {
         Handle<Texture> gBufferOcclusionMetallicRoughness;
         Handle<Texture> gBufferEmissive;
         Handle<Texture> gBufferDepth;
+        Handle<Texture> gBufferPosition;
 
         Handle<Texture> shadowMap;
+        Handle<Sampler> shadowSampler;
+    };
+
+    // stores indices of input textures
+    struct LightingPassUniform {
+        uint32_t gBufferAlbedoIndex;
+        uint32_t gBufferNormalIndex;
+        uint32_t gBufferOcclusionMetallicRoughnessIndex;
+        uint32_t gBufferEmissiveIndex;
+        uint32_t gBufferDepthIndex;
+
+        uint32_t shadowMapIndex;
+        uint32_t shadowSamplerIndex;
     };
 
     struct LightingPass {
-        void init(GpuDevice* gpuDevice);
+        void init(GpuDevice *gpuDevice);
 
         void shutdown();
 
@@ -29,13 +44,20 @@ namespace Flare {
 
         void destroyRenderTarget();
 
-        GpuDevice* gpu = nullptr;
+        void setInputs(const LightingPassInputs& inputs);
+
+        GpuDevice *gpu = nullptr;
 
         PipelineCI pipelineCI;
         Handle<Pipeline> pipelineHandle;
         Handle<Texture> targetHandle;
 
         LightingPassInputs inputs;
+
+        PushConstants pc{};
+
+        LightingPassUniform uniforms;
+        RingBuffer uniformRingBuffer;
 
         bool loaded = false;
     };

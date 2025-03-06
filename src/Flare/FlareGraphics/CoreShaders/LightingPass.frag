@@ -1,12 +1,27 @@
 #version 460
 
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_samplerless_texture_functions : enable
 #extension GL_GOOGLE_include_directive : enable
 
 #include "CoreShaders/BindlessCommon.glsl"
 #include "CoreShaders/SrgbToLinear.glsl"
 #include "CoreShaders/CubemapCommon.glsl"
 #include "CoreShaders/NormalEncoding.glsl"
+
+struct LightingPassUniform {
+    uint gBufferAlbedoIndex;
+    uint gBufferNormalIndex;
+    uint gBufferOcclusionMetallicRoughnessIndex;
+    uint gBufferEmissiveIndex;
+    uint gBufferDepthIndex;
+
+    uint shadowMapIndex;
+    uint shadowSamplerIndex;
+};
+layout (set = 0, binding = 0) uniform LightingPassUniformBuffer {
+    LightingPassUniform uniforms;
+} lightingPassUniformAlias[];
 
 layout (location = 0) in vec2 inUV;
 
@@ -60,14 +75,56 @@ float microfacetDistribution(PbrInfo pbrInfo) {
     return roughnessSq / (PI * f * f);
 }
 
+float shadowCalculation(vec4 fragPosLightSpace, vec2 off, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
+    vec3 ndcFragLightSpace = fragPosLightSpace.xyz / fragPosLightSpace.w;
+
+    vec3 zeroToOneFragLightSpace = ndcFragLightSpace;
+    zeroToOneFragLightSpace.xy = (zeroToOneFragLightSpace.xy + 1.0) / 2.0;
+
+    float shadow = 1.0;
+    if (fragPosLightSpace.z > -1.0 && fragPosLightSpace.z < 1.0) {
+        float dist = texture(sampler2D(globalTextures[nonuniformEXT(shadowDepthTextureIndex)],
+        globalSamplers[shadowSamplerIndex]), zeroToOneFragLightSpace.xy + off).r;
+
+        if (fragPosLightSpace.w > 0.0 && dist < fragPosLightSpace.z) {
+            shadow = 0.1;
+        }
+    }
+    return shadow;
+}
+
+float filterPCF(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shadowSamplerIndex) {
+    ivec2 texDim = textureSize(globalTextures[nonuniformEXT(shadowDepthTextureIndex)], 0);
+
+    float scale = 1.5;
+    float dx = scale * 1.0 / float(texDim.x);
+    float dy = scale * 1.0 / float(texDim.y);
+
+    float shadowFactor = 0.0;
+    int count = 0;
+    int range = 1;
+
+    for (int x = -range; x <= range; x++) {
+        for (int y = -range; y <= range; y++) {
+            shadowFactor += shadowCalculation(fragPosLightSpace, vec2(dx*x, dy*y), shadowDepthTextureIndex, shadowSamplerIndex);
+            count++;
+        }
+    }
+
+    return shadowFactor / count;
+}
+
 void main() {
+    LightingPassUniform uniforms = lightingPassUniformAlias[pc.uniformOffset].uniforms;
     uint cameraBufferIndex = pc.data0;
     uint lightBufferIndex = pc.data1;
-    uint albedoIndex = pc.data2;
-    uint normalIndex = pc.data3;
-    uint occlusionMetallicRoughnessIndex = pc.data4;
-    uint emissiveIndex = pc.data5;
-    uint depthIndex = pc.data6;
+    uint albedoIndex = uniforms.gBufferAlbedoIndex;
+    uint normalIndex = uniforms.gBufferNormalIndex;
+    uint occlusionMetallicRoughnessIndex = uniforms.gBufferOcclusionMetallicRoughnessIndex;
+    uint emissiveIndex = uniforms.gBufferEmissiveIndex;
+    uint depthIndex = uniforms.gBufferDepthIndex;
+    uint shadowMapIndex = uniforms.shadowMapIndex;
+    uint shadowSamplerIndex = uniforms.shadowSamplerIndex;
 
     Camera camera = cameraAlias[cameraBufferIndex].camera;
     Light light = lightAlias[lightBufferIndex].light;
@@ -135,7 +192,11 @@ void main() {
     vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInfo);
     vec3 specularContrib = F * G * D / (4.0 * NoL * NoV);
 
-    vec3 color = NoL * (diffuseContrib + specularContrib);
+    vec4 fragLightSpace = light.lightViewProjection * vec4(worldPos, 1.0);
+
+    float shadow = filterPCF(fragLightSpace, shadowMapIndex, shadowSamplerIndex);
+
+    vec3 color = NoL * (diffuseContrib + specularContrib) * shadow;
 
     //todo: shadows and ibl
 
