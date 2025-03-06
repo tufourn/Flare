@@ -19,6 +19,10 @@ namespace Flare {
 
         Handle<Texture> shadowMap;
         Handle<Sampler> shadowSampler;
+
+        Handle<Texture> irradianceMap;
+        Handle<Texture> prefilteredCube;
+        Handle<Texture> brdfLut;
     };
 
     // stores indices of input textures
@@ -31,6 +35,10 @@ namespace Flare {
 
         uint32_t shadowMapIndex;
         uint32_t shadowSamplerIndex;
+
+        uint32_t irradianceMapIndex;
+        uint32_t prefilteredCubeIndex;
+        uint32_t brdfLutIndex;
     };
 
     struct LightingPass {

@@ -18,6 +18,10 @@ struct LightingPassUniform {
 
     uint shadowMapIndex;
     uint shadowSamplerIndex;
+
+    uint irradianceMapIndex;
+    uint prefilteredCubeIndex;
+    uint brdfLutIndex;
 };
 layout (set = 0, binding = 0) uniform LightingPassUniformBuffer {
     LightingPassUniform uniforms;
@@ -114,6 +118,30 @@ float filterPCF(vec4 fragPosLightSpace, uint shadowDepthTextureIndex, uint shado
     return shadowFactor / count;
 }
 
+float lodFromRoughness(float perceptualRoughness) {
+    const float MAX_LOD = 10.0;// cube res is 1024
+    return perceptualRoughness * MAX_LOD;
+}
+
+vec3 getIblContribution(PbrInfo pbrInfo, vec3 N, vec3 R) {
+    LightingPassUniform uniforms = lightingPassUniformAlias[pc.uniformOffset].uniforms;
+
+    uint irradianceMapIndex = uniforms.irradianceMapIndex;
+    uint prefilteredCubeIndex = uniforms.prefilteredCubeIndex;
+    uint brdfLutIndex = uniforms.brdfLutIndex;
+
+    float lod = lodFromRoughness(pbrInfo.perceptualRoughness);
+    vec3 brdf = GET_TEXTURE(brdfLutIndex, DEFAULT_SAMPLER_INDEX, vec2(pbrInfo.NoV, 1.0 - pbrInfo.perceptualRoughness)).rgb;
+
+    vec3 diffuseLight = srgbToLinear(GET_CUBEMAP(irradianceMapIndex, DEFAULT_SAMPLER_INDEX, N)).rgb;
+    vec3 specularLight = srgbToLinear(GET_CUBEMAP_LOD(prefilteredCubeIndex, DEFAULT_SAMPLER_INDEX, R, lod)).rgb;
+
+    vec3 diffuse = diffuseLight * pbrInfo.diffuseColor;
+    vec3 specular = specularLight * (pbrInfo.specularColor * brdf.x + brdf.y);
+
+    return diffuse + specular;
+}
+
 void main() {
     LightingPassUniform uniforms = lightingPassUniformAlias[pc.uniformOffset].uniforms;
     uint cameraBufferIndex = pc.data0;
@@ -125,6 +153,7 @@ void main() {
     uint depthIndex = uniforms.gBufferDepthIndex;
     uint shadowMapIndex = uniforms.shadowMapIndex;
     uint shadowSamplerIndex = uniforms.shadowSamplerIndex;
+
 
     Camera camera = cameraAlias[cameraBufferIndex].camera;
     Light light = lightAlias[lightBufferIndex].light;
@@ -198,7 +227,7 @@ void main() {
 
     vec3 color = NoL * (diffuseContrib + specularContrib) * shadow;
 
-    //todo: shadows and ibl
+    color += getIblContribution(pbrInfo, N, reflection);
 
     const float occlusionStrength = 1.0;
     color = mix(color, color * occlusion, occlusionStrength);

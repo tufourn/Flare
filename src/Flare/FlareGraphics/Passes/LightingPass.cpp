@@ -103,6 +103,10 @@ namespace Flare {
         uniforms.shadowMapIndex = inputs.shadowMap.index;
         uniforms.shadowSamplerIndex = inputs.shadowSampler.index;
 
+        uniforms.irradianceMapIndex = inputs.irradianceMap.index;
+        uniforms.prefilteredCubeIndex = inputs.prefilteredCube.index;
+        uniforms.brdfLutIndex = inputs.brdfLut.index;
+
         gpu->uploadBufferData(uniformRingBuffer.buffer(), &uniforms);
     }
 }

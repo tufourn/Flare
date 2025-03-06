@@ -223,16 +223,14 @@ void main() {
     vec3 specularContrib = F * G * D / (4.0 * NoL * NoV);
 
     float shadow = filterPCF(inFragLightSpace, glob.shadowDepthTextureIndex, glob.shadowSamplerIndex);
-//    vec3 color = NoL * lightIntensity * lightColor * (diffuseContrib + specularContrib) * shadow;
-//    vec3 color = NoL * (diffuseContrib + specularContrib) * shadow;
-    vec3 color = NoL * (diffuseContrib);
+    vec3 color = NoL * lightIntensity * lightColor * (diffuseContrib + specularContrib) * shadow;
 
-//    color += getIblContribution(pbrInfo, N, reflection);
-//
-//    const float occlusionStrength = 1.0;
-//    color = mix(color, color * ao, occlusionStrength);
-//
-//    color += emissive;
+    color += getIblContribution(pbrInfo, N, reflection);
+
+    const float occlusionStrength = 1.0;
+    color = mix(color, color * ao, occlusionStrength);
+
+    color += emissive;
 
     outColor = vec4(color, 1.0);
 }

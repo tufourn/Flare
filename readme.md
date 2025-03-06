@@ -9,15 +9,15 @@ A GPU-Driven renderer. It's a playground for me to experiment with and implement
 ## Features
 - [x] Fully bindless resources
 - [x] glTF scene loading
-- [x] Physically-based rendering
-- [x] Shadow mapping
-- [x] Compute frustum culling
-- [x] Image based lighting
 - [x] Shader hot-reloading
+- [x] Compute culling
+- [x] Deferred shading pipeline
 
 ## Todos
+- [ ] SSR
+- [ ] SSAO
+- [ ] Post-processing effects
 - [ ] Raytracing
-- [ ] Deferred rendering pipeline
 
 ## Build instructions
 ### Cloning

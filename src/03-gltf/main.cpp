@@ -81,9 +81,9 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-        gltf.init("assets/BoxTextured.gltf", &gpu);
+//        gltf.init("assets/BoxTextured.gltf", &gpu);
 //        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
-//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
+        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
 //        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
@@ -347,6 +347,10 @@ struct TriangleApp : Application {
 
                         .shadowMap = shadowPass.depthTextureHandle,
                         .shadowSampler = shadowPass.samplerHandle,
+
+                        .irradianceMap = skyboxPass.irradianceMapHandle,
+                        .prefilteredCube = skyboxPass.prefilteredCubeHandle,
+                        .brdfLut = skyboxPass.brdfLutHandle,
                 };
                 lightingPass.setInputs(lightingPassInputs);
 
@@ -385,50 +389,10 @@ struct TriangleApp : Application {
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-//                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-//                                          VK_IMAGE_LAYOUT_UNDEFINED,
-//                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-//
-//                VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(
-//                        gpu.swapchainImageViews[gpu.swapchainImageIndex]);
-//
-//                VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(
-//                        gpu.getTexture(gpu.depthTextures[gpu.swapchainImageIndex])->imageView);
-//
-//                VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu.swapchainExtent, 1,
-//                                                                        &colorAttachment,
-//                                                                        &depthAttachment);
-//
-//                Pipeline *pipeline = gpu.pipelines.get(pipelineHandle);
-//
-//                vkCmdBeginRendering(cmd, &renderingInfo);
-//                vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
-//
-//                vkCmdBindIndexBuffer(cmd, gpu.getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
-//                vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
-//                                        gpu.bindlessDescriptorSets.size(), gpu.bindlessDescriptorSets.data(),
-//                                        0, nullptr);
-//
-//                VkViewport viewport = VkHelper::viewport(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
-//                vkCmdSetViewport(cmd, 0, 1, &viewport);
-//
-//                VkRect2D scissor = VkHelper::scissor(gpu.swapchainExtent.width, gpu.swapchainExtent.height);
-//                vkCmdSetScissor(cmd, 0, 1, &scissor);
-//
-//                vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants),
-//                                   &pc);
-//
-//                vkCmdDrawIndexedIndirectCount(cmd,
-//                                              gpu.getBuffer(chosenIndirectDrawBufferHandle)->buffer, 0,
-//                                              gpu.getBuffer(countBufferHandle)->buffer, 0,
-//                                              gltf.meshDraws.size(),
-//                                              sizeof(IndirectDrawData));
-//
+                // skybox pass
                 if (shouldRenderSkybox) {
                     skyboxPass.render(cmd, projection, view, lightingPass.targetHandle, gBufferPass.depthTargetHandle);
                 }
-//
-//                vkCmdEndRendering(cmd);
 
                 ImGui::Begin("Options");
                 ImGui::Checkbox("Shadows", &shadowPass.enable);
