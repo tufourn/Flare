@@ -109,23 +109,21 @@ namespace Flare {
         return planes;
     }
 
-    void FrustumCullPass::updateUniforms() {
+
+    void FrustumCullPass::setInputs(const FrustumCullInputs &inputs) {
         frustumUniformRingBuffer.moveToNextBuffer();
+        uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(inputs.viewProjection);
         gpu->uploadBufferData(frustumUniformRingBuffer.buffer(), &uniforms);
-    }
 
-    void
-    FrustumCullPass::setBuffers(Handle<Buffer> inputBuffer, Handle<Buffer> outputBuffer, Handle<Buffer> countBuffer,
-                                Handle<Buffer> transformBuffer, Handle<Buffer> boundsBuffer) {
-        maxDrawCount = gpu->getBuffer(inputBuffer)->size / sizeof(IndirectDrawData);
-        outputIndirectBufferHandle = outputBuffer;
-        outputCountBufferHandle = countBuffer;
+        maxDrawCount = gpu->getBuffer(inputs.inputIndirectDrawBuffer)->size / sizeof(IndirectDrawData);
+        outputIndirectBufferHandle = inputs.outputIndirectDrawBuffer;
+        outputCountBufferHandle = inputs.countBuffer;
 
-        pc.data0 = inputBuffer.index;
-        pc.data1 = outputBuffer.index;
-        pc.data2 = countBuffer.index;
-        pc.data3 = transformBuffer.index;
-        pc.data4 = boundsBuffer.index;
+        pc.data0 = inputs.inputIndirectDrawBuffer.index;
+        pc.data1 = inputs.outputIndirectDrawBuffer.index;
+        pc.data2 = inputs.countBuffer.index;
+        pc.data3 = inputs.transformBuffer.index;
+        pc.data4 = inputs.boundsBuffer.index;
         pc.data5 = maxDrawCount;
     }
 }

@@ -85,6 +85,10 @@ namespace Flare {
         vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
 
         vkCmdEndRendering(cmd);
+
+        VkHelper::transitionImage(cmd, gpu->getTexture(targetHandle)->image, // barrier
+                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     }
 
     void LightingPass::setInputs(const LightingPassInputs &inputs) {

@@ -66,9 +66,7 @@ namespace Flare {
         }
     }
 
-    void ShadowPass::render(VkCommandBuffer cmd,
-                            Handle<Buffer> indexBuffer,
-                            Handle<Buffer> indirectDrawBuffer, uint32_t count) {
+    void ShadowPass::render(VkCommandBuffer cmd) {
         Texture *texture = gpu->getTexture(depthTextureHandle);
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
@@ -99,8 +97,9 @@ namespace Flare {
 
             vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pc);
 
-            vkCmdDrawIndexedIndirect(cmd, gpu->getBuffer(indirectDrawBuffer)->buffer, 0, count,
-                                     sizeof(IndirectDrawData));
+            vkCmdDrawIndexedIndirectCount(cmd, gpu->getBuffer(indirectDrawBuffer)->buffer, 0,
+                                          gpu->getBuffer(countBuffer)->buffer, 0, maxDrawCount,
+                                          sizeof(IndirectDrawData));
         }
 
         vkCmdEndRendering(cmd);
@@ -110,11 +109,15 @@ namespace Flare {
                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
     }
 
-    void ShadowPass::setBuffers(Handle<Buffer> indirectBuffer, Handle<Buffer> positionBuffer,
-                                Handle<Buffer> transformBuffer, Handle<Buffer> lightBuffer) {
-        pc.data0 = indirectBuffer.index;
-        pc.data1 = positionBuffer.index;
-        pc.data2 = transformBuffer.index;
-        pc.data3 = lightBuffer.index;
+    void ShadowPass::setInputs(const ShadowInputs &inputs) {
+        pc.data0 = inputs.indirectDrawBuffer.index;
+        pc.data1 = inputs.positionBuffer.index;
+        pc.data2 = inputs.transformBuffer.index;
+        pc.data3 = inputs.lightBuffer.index;
+
+        indexBuffer = inputs.indexBuffer;
+        indirectDrawBuffer = inputs.indirectDrawBuffer;
+        countBuffer = inputs.countBuffer;
+        maxDrawCount = inputs.maxDrawCount;
     }
 }

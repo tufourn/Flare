@@ -27,6 +27,13 @@ namespace Flare {
             glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
     };
 
+    struct SkyboxInputs {
+        glm::mat4 projection;
+        glm::mat4 view;
+        Handle<Texture> colorAttachment;
+        Handle<Texture> depthAttachment;
+    };
+
     struct SkyboxPass {
         void init(GpuDevice *gpuDevice);
 
@@ -34,7 +41,9 @@ namespace Flare {
 
         void loadImage(std::filesystem::path path);
 
-        void render(VkCommandBuffer cmd, glm::mat4 projection, glm::mat3 view, Handle<Texture> color, Handle<Texture> depth);
+        void render(VkCommandBuffer cmd);
+
+        void setInputs(const SkyboxInputs& inputs);
 
         void renderFacesOffscreenAndCopyToCubemap(Handle<Pipeline> pipelineHandle, Handle<Texture> targetHandle,
                                                   PushConstants pc);
@@ -62,5 +71,9 @@ namespace Flare {
         Handle<Pipeline> irradianceMapPipelineHandle;
         Handle<Pipeline> prefilteredCubePipelineHandle;
         Handle<Pipeline> brdfLutPipelineHandle;
+
+        Handle<Texture> colorAttachmentHandle;
+        Handle<Texture> depthAttachmentHandle;
+        PushConstants pc;
     };
 }

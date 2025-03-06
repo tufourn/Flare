@@ -123,10 +123,6 @@ namespace Flare {
         loaded = true;
     }
 
-    void GBufferPass::setBuffers(const MeshDrawBuffers &buffers) {
-        meshDrawBuffers = buffers;
-    }
-
     void GBufferPass::render(VkCommandBuffer cmd) {
         Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
@@ -154,13 +150,6 @@ namespace Flare {
                 gpu->getBuffer(meshDrawBuffers.tangents)->buffer,
         };
         VkDeviceSize offsets[] = {0, 0, 0, 0};
-
-        PushConstants pc{};
-        pc.uniformOffset = gBufferUniformRingBuffer.buffer().index;
-        pc.data0 = meshDrawBuffers.indirectDraws.index;
-        pc.data1 = meshDrawBuffers.transforms.index;
-        pc.data2 = meshDrawBuffers.materials.index;
-        pc.data3 = meshDrawBuffers.textures.index;
 
         VkHelper::transitionImage(cmd, gpu->getTexture(albedoTargetHandle)->image,
                                   VK_IMAGE_LAYOUT_UNDEFINED,
@@ -202,9 +191,17 @@ namespace Flare {
         gpu->destroyTexture(emissiveTargetHandle);
     }
 
-    void GBufferPass::updateViewProjection(glm::mat4 viewProjection) {
+    void GBufferPass::setInputs(const GBufferInputs &inputs) {
+        meshDrawBuffers = inputs.meshDrawBuffers;
+
         uniforms.prevViewProjection = uniforms.viewProjection;
-        uniforms.viewProjection = viewProjection;
+        uniforms.viewProjection = inputs.viewProjection;
+
+        pc.uniformOffset = gBufferUniformRingBuffer.buffer().index;
+        pc.data0 = meshDrawBuffers.indirectDraws.index;
+        pc.data1 = meshDrawBuffers.transforms.index;
+        pc.data2 = meshDrawBuffers.materials.index;
+        pc.data3 = meshDrawBuffers.textures.index;
 
         gBufferUniformRingBuffer.moveToNextBuffer();
         gpu->uploadBufferData(gBufferUniformRingBuffer.buffer(), &uniforms);

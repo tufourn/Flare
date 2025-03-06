@@ -230,37 +230,53 @@ struct TriangleApp : Application {
 
                 // todo: frustum cull for shadows
                 // shadows
-                shadowPass.setBuffers(indirectDrawDataBufferHandle, positionBufferHandle, transformBufferHandle,
-                                      lightDataRingBuffer.buffer());
+                ShadowInputs shadowPassInputs = {
+                        .positionBuffer = positionBufferHandle,
+                        .transformBuffer = transformBufferHandle,
+                        .lightBuffer = lightDataRingBuffer.buffer(),
+
+                        .indexBuffer = indexBufferHandle,
+                        .indirectDrawBuffer = indirectDrawDataBufferHandle,
+                        .countBuffer = countBufferHandle,
+                        .maxDrawCount = meshCount,
+                };
+                shadowPass.setInputs(shadowPassInputs);
 
                 // frustum cull
                 Handle<Buffer> chosenIndirectDrawBufferHandle = indirectDrawDataBufferHandle;
+                FrustumCullInputs frustumCullInputs = {
+                        .viewProjection = projection * view,
+                        .inputIndirectDrawBuffer = indirectDrawDataBufferHandle,
+                        .outputIndirectDrawBuffer = culledIndirectDrawDataBufferHandle,
+                        .countBuffer = countBufferHandle,
+                        .transformBuffer = transformBufferHandle,
+                        .boundsBuffer = boundsBufferHandle,
+                };
                 if (shouldFrustumCull) {
                     chosenIndirectDrawBufferHandle = culledIndirectDrawDataBufferHandle;
                     if (!fixedFrustum) {
-                        frustumCullPass.uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(projection * view);
+                        frustumCullPass.setInputs(frustumCullInputs);
                     }
-                    frustumCullPass.updateUniforms();
-                    frustumCullPass.setBuffers(indirectDrawDataBufferHandle, culledIndirectDrawDataBufferHandle,
-                                               countBufferHandle, transformBufferHandle, boundsBufferHandle);
                 }
 
                 // gbuffer
-                MeshDrawBuffers meshDrawBuffers = {
-                        .indices = indexBufferHandle,
-                        .positions = positionBufferHandle,
-                        .uvs = uvBufferHandle,
-                        .normals = normalBufferHandle,
-                        .tangents = tangentBufferHandle,
-                        .transforms = transformBufferHandle,
-                        .materials = materialBufferHandle,
-                        .textures = textureBufferHandle,
-                        .indirectDraws = chosenIndirectDrawBufferHandle,
-                        .count = countBufferHandle,
-                        .drawCount = static_cast<uint32_t>(indirectDrawDatas.size()),
+                GBufferInputs gBufferInputs = {
+                        .viewProjection = projection * view,
+                        .meshDrawBuffers = {
+                                .indices = indexBufferHandle,
+                                .positions = positionBufferHandle,
+                                .uvs = uvBufferHandle,
+                                .normals = normalBufferHandle,
+                                .tangents = tangentBufferHandle,
+                                .transforms = transformBufferHandle,
+                                .materials = materialBufferHandle,
+                                .textures = textureBufferHandle,
+                                .indirectDraws = chosenIndirectDrawBufferHandle,
+                                .count = countBufferHandle,
+                                .drawCount = meshCount,
+                        },
                 };
-                gBufferPass.setBuffers(meshDrawBuffers);
-                gBufferPass.updateViewProjection(projection * view);
+                gBufferPass.setInputs(gBufferInputs);
 
                 // lighting
                 LightingPassInputs lightingPassInputs = {
@@ -282,7 +298,19 @@ struct TriangleApp : Application {
                 };
                 lightingPass.setInputs(lightingPassInputs);
 
+                SkyboxInputs skyboxInputs = {
+                        .projection = projection,
+                        .view = view,
+                        .colorAttachment = lightingPass.targetHandle,
+                        .depthAttachment = gBufferPass.depthTargetHandle,
+                };
+                skyboxPass.setInputs(skyboxInputs);
+
                 VkCommandBuffer cmd = gpu.getCommandBuffer();
+
+                // todo: separate frustum cull for shadows
+                // shadows
+                shadowPass.render(cmd);
 
                 // frustum cull
                 if (shouldFrustumCull) {
@@ -290,11 +318,6 @@ struct TriangleApp : Application {
                     frustumCullPass.cull(cmd);
                     frustumCullPass.addBarriers(cmd, gpu.mainFamily, gpu.mainFamily);
                 }
-
-                // shadows
-                shadowPass.render(cmd,
-                                  indexBufferHandle,
-                                  indirectDrawDataBufferHandle, indirectDrawDatas.size());
 
                 // gbuffer pass
                 gBufferPass.render(cmd);
@@ -308,7 +331,7 @@ struct TriangleApp : Application {
 
                 // skybox pass
                 if (shouldRenderSkybox) {
-                    skyboxPass.render(cmd, projection, view, lightingPass.targetHandle, gBufferPass.depthTargetHandle);
+                    skyboxPass.render(cmd);
                 }
 
                 ImGui::Begin("Options");

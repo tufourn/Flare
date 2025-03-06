@@ -197,20 +197,13 @@ namespace Flare {
         }
     }
 
-    void SkyboxPass::render(VkCommandBuffer cmd, glm::mat4 projection, glm::mat3 view, Handle<Texture> color,
-                            Handle<Texture> depth) {
-        PushConstants pc = {
-                .mat = projection * glm::mat4(view),
-                .data0 = skyboxHandle.index,
-                .data1 = samplerHandle.index,
-        };
-
+    void SkyboxPass::render(VkCommandBuffer cmd) {
         Pipeline *skyboxPipeline = gpu->getPipeline(skyboxPipelineHandle);
 
-        VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(gpu->getTexture(color)->imageView,
+        VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(gpu->getTexture(colorAttachmentHandle)->imageView,
                                                                               VK_ATTACHMENT_LOAD_OP_LOAD,
                                                                               VK_ATTACHMENT_STORE_OP_STORE);
-        VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(gpu->getTexture(depth)->imageView,
+        VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(gpu->getTexture(depthAttachmentHandle)->imageView,
                                                                               VK_ATTACHMENT_LOAD_OP_LOAD,
                                                                               VK_ATTACHMENT_STORE_OP_STORE);
         VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu->swapchainExtent, 1, &colorAttachment,
@@ -365,5 +358,15 @@ namespace Flare {
         );
 
         gpu->submitImmediate(cmd);
+    }
+
+    void SkyboxPass::setInputs(const SkyboxInputs &inputs) {
+        glm::mat4 fixedView = glm::mat4(glm::mat3(inputs.view));
+        pc.mat = inputs.projection * fixedView;
+        pc.data0 = skyboxHandle.index;
+        pc.data1 = samplerHandle.index;
+
+        colorAttachmentHandle = inputs.colorAttachment;
+        depthAttachmentHandle = inputs.depthAttachment;
     }
 }

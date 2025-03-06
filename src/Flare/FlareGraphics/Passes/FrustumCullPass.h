@@ -19,15 +19,21 @@ namespace Flare {
         FrustumPlanes frustumPlanes;
     };
 
+    struct FrustumCullInputs {
+        glm::mat4 viewProjection;
+        Handle<Buffer> inputIndirectDrawBuffer;
+        Handle<Buffer> outputIndirectDrawBuffer;
+        Handle<Buffer> countBuffer;
+        Handle<Buffer> transformBuffer;
+        Handle<Buffer> boundsBuffer;
+    };
+
     struct FrustumCullPass {
         void init(GpuDevice *gpuDevice);
 
         static FrustumPlanes getFrustumPlanes(glm::mat4 mat, bool normalize = true);
 
-        void updateUniforms();
-
-        void setBuffers(Handle<Buffer> inputBuffer, Handle<Buffer> outputBuffer, Handle<Buffer> countBuffer,
-                        Handle<Buffer> transformBuffer, Handle<Buffer> boundsBuffer);
+        void setInputs(const FrustumCullInputs& inputs);
 
         void cull(VkCommandBuffer cmd);
 

@@ -11,10 +11,13 @@ namespace Flare {
         glm::mat4 prevViewProjection = glm::mat4(1.f);
     };
 
+    struct GBufferInputs {
+        glm::mat4 viewProjection = glm::mat4(1.f);
+        MeshDrawBuffers meshDrawBuffers;
+    };
+
     struct GBufferPass {
         void init(GpuDevice *gpuDevice);
-
-        void setBuffers(const MeshDrawBuffers& buffers);
 
         void render(VkCommandBuffer cmd);
 
@@ -24,7 +27,7 @@ namespace Flare {
 
         void generateRenderTargets();
 
-        void updateViewProjection(glm::mat4 viewProjection);
+        void setInputs(const GBufferInputs& inputs);
 
         GpuDevice *gpu = nullptr;
 
@@ -41,6 +44,7 @@ namespace Flare {
 
         MeshDrawBuffers meshDrawBuffers;
 
+        PushConstants pc{};
         GBufferUniforms uniforms;
         RingBuffer gBufferUniformRingBuffer;
     };
