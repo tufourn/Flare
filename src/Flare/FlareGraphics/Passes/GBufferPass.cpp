@@ -53,6 +53,7 @@ namespace Flare {
     void GBufferPass::shutdown() {
         destroyRenderTargets();
         gpu->destroyPipeline(pipelineHandle);
+        gBufferUniformRingBuffer.shutdown();
     }
 
     void GBufferPass::generateRenderTargets() {
@@ -199,7 +200,6 @@ namespace Flare {
         gpu->destroyTexture(normalTargetHandle);
         gpu->destroyTexture(occlusionMetallicRoughnessTargetHandle);
         gpu->destroyTexture(emissiveTargetHandle);
-        gBufferUniformRingBuffer.shutdown();
     }
 
     void GBufferPass::updateViewProjection(glm::mat4 viewProjection) {

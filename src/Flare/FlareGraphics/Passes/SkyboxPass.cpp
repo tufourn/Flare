@@ -109,12 +109,12 @@ namespace Flare {
                 ShaderStage{"CoreShaders/Skybox.vert", VK_SHADER_STAGE_VERTEX_BIT},
                 ShaderStage{"CoreShaders/Skybox.frag", VK_SHADER_STAGE_FRAGMENT_BIT},
         };
-        skyboxPipelineCI.rendering.colorFormats.push_back(gpu->surfaceFormat.format);
+        skyboxPipelineCI.rendering.colorFormats.push_back(VK_FORMAT_R32G32B32A32_SFLOAT);
         skyboxPipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
         skyboxPipelineCI.depthStencil = {
                 .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
                 .depthTestEnable = true,
-                .depthWriteEnable = true,
+                .depthWriteEnable = false,
         };
         skyboxPipelineCI.vertexInput
                 .addBinding({.binding = 0, .stride = sizeof(glm::vec4), .inputRate = VK_VERTEX_INPUT_RATE_VERTEX})
@@ -197,7 +197,8 @@ namespace Flare {
         }
     }
 
-    void SkyboxPass::render(VkCommandBuffer cmd, glm::mat4 projection, glm::mat3 view) {
+    void SkyboxPass::render(VkCommandBuffer cmd, glm::mat4 projection, glm::mat3 view, Handle<Texture> color,
+                            Handle<Texture> depth) {
         PushConstants pc = {
                 .mat = projection * glm::mat4(view),
                 .data0 = skyboxHandle.index,
@@ -205,6 +206,17 @@ namespace Flare {
         };
 
         Pipeline *skyboxPipeline = gpu->getPipeline(skyboxPipelineHandle);
+
+        VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(gpu->getTexture(color)->imageView,
+                                                                              VK_ATTACHMENT_LOAD_OP_LOAD,
+                                                                              VK_ATTACHMENT_STORE_OP_STORE);
+        VkRenderingAttachmentInfo depthAttachment = VkHelper::depthAttachment(gpu->getTexture(depth)->imageView,
+                                                                              VK_ATTACHMENT_LOAD_OP_LOAD,
+                                                                              VK_ATTACHMENT_STORE_OP_STORE);
+        VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu->swapchainExtent, 1, &colorAttachment,
+                                                                &depthAttachment);
+
+        vkCmdBeginRendering(cmd, &renderingInfo);
 
         vkCmdBindPipeline(cmd, skyboxPipeline->bindPoint, skyboxPipeline->pipeline);
         vkCmdBindDescriptorSets(cmd, skyboxPipeline->bindPoint, skyboxPipeline->pipelineLayout, 0,
@@ -216,6 +228,8 @@ namespace Flare {
         vkCmdPushConstants(cmd, skyboxPipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0,
                            sizeof(PushConstants), &pc);
         vkCmdDrawIndexed(cmd, 36, 1, 0, 0, 0);
+
+        vkCmdEndRendering(cmd);
     }
 
     void SkyboxPass::renderFacesOffscreenAndCopyToCubemap(Handle<Pipeline> pipelineHandle, Handle<Texture> targetHandle,

@@ -85,8 +85,5 @@ namespace Flare {
         vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
 
         vkCmdEndRendering(cmd);
-        VkHelper::transitionImage(cmd, gpu->getTexture(targetHandle)->image,
-                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     }
 }

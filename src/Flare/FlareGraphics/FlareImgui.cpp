@@ -30,6 +30,8 @@ namespace Flare {
         ImGui::CreateContext();
         ImGui_ImplGlfw_InitForVulkan(gpu->glfwWindow, true);
 
+        VkFormat format = VK_FORMAT_R32G32B32A32_SFLOAT;
+
         ImGui_ImplVulkan_InitInfo initInfo = {
                 .Instance = gpu->instance,
                 .PhysicalDevice = gpu->physicalDevice,
@@ -43,7 +45,7 @@ namespace Flare {
                 .PipelineRenderingCreateInfo = {
                         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
                         .colorAttachmentCount = 1,
-                        .pColorAttachmentFormats = &gpu->surfaceFormat.format,
+                        .pColorAttachmentFormats = &format,
                 }
         };
         ImGui_ImplVulkan_Init(&initInfo);

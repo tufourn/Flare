@@ -81,11 +81,11 @@ struct TriangleApp : Application {
 
         pipelineHandle = gpu.createPipeline(pipelineCI);
 
-        gltf.init("assets/BoxTextured.gltf", &gpu);
+//        gltf.init("assets/BoxTextured.gltf", &gpu);
 //        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
 //        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
-//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
+        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI globalsBufferCI = {
                 .size = sizeof(Globals),
@@ -374,18 +374,9 @@ struct TriangleApp : Application {
                 // lighting pass
                 lightingPass.render(cmd);
 
-                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+                VkHelper::transitionImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
                                           VK_IMAGE_LAYOUT_UNDEFINED,
-                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-                VkHelper::copyImageToImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
-                                           gpu.swapchainImages[gpu.swapchainImageIndex],
-                                           gpu.swapchainExtent, gpu.swapchainExtent);
-
-                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
 
 //                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
 //                                          VK_IMAGE_LAYOUT_UNDEFINED,
@@ -426,9 +417,9 @@ struct TriangleApp : Application {
 //                                              gltf.meshDraws.size(),
 //                                              sizeof(IndirectDrawData));
 //
-//                if (shouldRenderSkybox) {
-//                    skyboxPass.render(cmd, projection, view);
-//                }
+                if (shouldRenderSkybox) {
+                    skyboxPass.render(cmd, projection, view, lightingPass.targetHandle, gBufferPass.depthTargetHandle);
+                }
 //
 //                vkCmdEndRendering(cmd);
 
@@ -446,10 +437,22 @@ struct TriangleApp : Application {
                 ImGui::End();
 
                 ImGui::Render();
-                imgui.draw(cmd, gpu.swapchainImageViews[gpu.swapchainImageIndex]);
+                imgui.draw(cmd, gpu.getTexture(lightingPass.targetHandle)->imageView);
+
+                VkHelper::transitionImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
+                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
                 VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                          VK_IMAGE_LAYOUT_UNDEFINED,
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+                VkHelper::copyImageToImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
+                                           gpu.swapchainImages[gpu.swapchainImageIndex],
+                                           gpu.swapchainExtent, gpu.swapchainExtent);
+
+                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
+                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                           VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
                 vkEndCommandBuffer(cmd);

@@ -34,7 +34,7 @@ namespace Flare {
 
         void loadImage(std::filesystem::path path);
 
-        void render(VkCommandBuffer cmd, glm::mat4 projection, glm::mat3 view);
+        void render(VkCommandBuffer cmd, glm::mat4 projection, glm::mat3 view, Handle<Texture> color, Handle<Texture> depth);
 
         void renderFacesOffscreenAndCopyToCubemap(Handle<Pipeline> pipelineHandle, Handle<Texture> targetHandle,
                                                   PushConstants pc);
