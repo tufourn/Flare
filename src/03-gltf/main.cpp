@@ -19,30 +19,6 @@
 using namespace Flare;
 
 struct TriangleApp : Application {
-    struct Globals {
-        glm::mat4 mvp;
-
-        glm::vec4 cameraPos;
-
-        uint32_t positionBufferIndex;
-        uint32_t normalBufferIndex;
-        uint32_t uvBufferIndex;
-        uint32_t transformBufferIndex;
-
-        uint32_t textureBufferIndex;
-        uint32_t materialBufferIndex;
-        uint32_t indirectDrawDataBufferIndex;
-        uint32_t tangentBufferIndex;
-
-        uint32_t shadowDepthTextureIndex;
-        uint32_t shadowSamplerIndex;
-        uint32_t irradianceMapIndex;
-        uint32_t prefilteredCubeIndex;
-
-        uint32_t brdfLutIndex;
-        uint32_t cubemapSamplerIndex;
-    };
-
     void init(const ApplicationConfig &appConfig) override {
         WindowConfig windowConfig{};
         windowConfig
@@ -58,42 +34,11 @@ struct TriangleApp : Application {
 
         gpu.init(gpuDeviceCI);
 
-        pipelineCI.shaderStages.emplace_back(ShaderStage{"shaders/gltf.vert", VK_SHADER_STAGE_VERTEX_BIT});
-        pipelineCI.shaderStages.emplace_back(ShaderStage{"shaders/gltf.frag", VK_SHADER_STAGE_FRAGMENT_BIT});
-        pipelineCI.rendering.colorFormats.push_back(gpu.surfaceFormat.format);
-        pipelineCI.rendering.depthFormat = VK_FORMAT_D32_SFLOAT;
-        pipelineCI.depthStencil = {
-                .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-                .depthTestEnable = true,
-                .depthWriteEnable = true,
-        };
-        pipelineCI.colorBlend.addAttachment(
-                {
-                        .srcColor = VK_BLEND_FACTOR_SRC_ALPHA,
-                        .dstColor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-                        .colorOp = VK_BLEND_OP_ADD,
-                        .srcAlpha = VK_BLEND_FACTOR_ONE,
-                        .dstAlpha = VK_BLEND_FACTOR_ZERO,
-                        .alphaOp = VK_BLEND_OP_ADD,
-                        .enable = true,
-                }
-        );
-
-        pipelineHandle = gpu.createPipeline(pipelineCI);
-
 //        gltf.init("assets/BoxTextured.gltf", &gpu);
 //        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
-        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
+//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
-//        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
-
-        BufferCI globalsBufferCI = {
-                .size = sizeof(Globals),
-                .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .name = "globals",
-                .bufferType = BufferType::eUniform,
-        };
-        globalsRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, globalsBufferCI);
+        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI positionsCI = {
                 .initialData = gltf.positions.data(),
@@ -216,23 +161,6 @@ struct TriangleApp : Application {
         gBufferPass.init(&gpu);
         lightingPass.init(&gpu);
 
-        globals.positionBufferIndex = positionBufferHandle.index;
-        globals.normalBufferIndex = normalBufferHandle.index;
-        globals.uvBufferIndex = uvBufferHandle.index;
-        globals.transformBufferIndex = transformBufferHandle.index;
-
-        globals.textureBufferIndex = textureBufferHandle.index;
-        globals.materialBufferIndex = materialBufferHandle.index;
-        globals.tangentBufferIndex = tangentBufferHandle.index;
-
-        globals.shadowDepthTextureIndex = shadowPass.depthTextureHandle.index;
-        globals.shadowSamplerIndex = shadowPass.samplerHandle.index;
-
-        globals.irradianceMapIndex = skyboxPass.irradianceMapHandle.index;
-        globals.prefilteredCubeIndex = skyboxPass.prefilteredCubeHandle.index;
-        globals.brdfLutIndex = skyboxPass.brdfLutHandle.index;
-        globals.cubemapSamplerIndex = skyboxPass.samplerHandle.index;
-
         glfwSetWindowUserPointer(window.glfwWindow, &camera);
         glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
         glfwSetKeyCallback(window.glfwWindow, Camera::keyCallback);
@@ -354,17 +282,6 @@ struct TriangleApp : Application {
                 };
                 lightingPass.setInputs(lightingPassInputs);
 
-                globals.mvp = projection * view;
-                globals.cameraPos = glm::vec4(camera.position, 1.0);
-                globals.indirectDrawDataBufferIndex = chosenIndirectDrawBufferHandle.index;
-
-                gpu.uploadBufferData(globalsRingBuffer.buffer(), &globals);
-
-                PushConstants pc = {
-                        .uniformOffset = globalsRingBuffer.buffer().index,
-                        .data0 = lightDataRingBuffer.buffer().index,
-                };
-
                 VkCommandBuffer cmd = gpu.getCommandBuffer();
 
                 // frustum cull
@@ -428,14 +345,12 @@ struct TriangleApp : Application {
 
                 vkEndCommandBuffer(cmd);
 
-                globalsRingBuffer.moveToNextBuffer();
                 lightDataRingBuffer.moveToNextBuffer();
                 cameraDataRingBuffer.moveToNextBuffer();
 
                 gpu.present();
 
                 if (shouldReloadPipeline) {
-                    gpu.recreatePipeline(pipelineHandle, pipelineCI);
                     gpu.recreatePipeline(lightingPass.pipelineHandle, lightingPass.pipelineCI);
                     shouldReloadPipeline = false;
                 }
@@ -456,11 +371,9 @@ struct TriangleApp : Application {
 
         gltf.shutdown();
 
-        globalsRingBuffer.shutdown();
         lightDataRingBuffer.shutdown();
         cameraDataRingBuffer.shutdown();
 
-        gpu.destroyPipeline(pipelineHandle);
         gpu.destroyBuffer(positionBufferHandle);
         gpu.destroyBuffer(indexBufferHandle);
         gpu.destroyBuffer(transformBufferHandle);
@@ -486,12 +399,6 @@ struct TriangleApp : Application {
     bool fixedFrustum = false;
     bool shouldRenderSkybox = true;
 
-    PipelineCI pipelineCI;
-    Handle<Pipeline> pipelineHandle;
-
-    Globals globals;
-    RingBuffer globalsRingBuffer;
-
     LightData lightData;
     RingBuffer lightDataRingBuffer;
 
@@ -514,7 +421,6 @@ struct TriangleApp : Application {
 
     std::vector<Bounds> bounds;
     Handle<Buffer> boundsBufferHandle;
-
 
     Camera camera;
 
