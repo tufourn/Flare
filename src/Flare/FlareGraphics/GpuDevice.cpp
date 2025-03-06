@@ -443,6 +443,8 @@ namespace Flare {
         setSwapchainExtent();
         createSwapchain();
 
+        createDrawTexture();
+
         VkFenceCreateInfo fenceCI = {
                 .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         };
@@ -530,6 +532,7 @@ namespace Flare {
             vkDestroySemaphore(device, renderCompletedSemaphores[i], nullptr);
         }
 
+        destroyDrawTexture();
         destroySwapchain();
         vmaDestroyAllocator(allocator);
         vkDestroyDevice(device, nullptr);
@@ -1250,6 +1253,9 @@ namespace Flare {
 
         destroySwapchain();
         createSwapchain();
+
+        destroyDrawTexture();
+        createDrawTexture();
     }
 
     Handle<Texture> GpuDevice::createTexture(const TextureCI &ci) {
@@ -1784,5 +1790,22 @@ namespace Flare {
         vkCmdPipelineBarrier2(cmd, &depInfo);
 
         submitImmediate(cmd);
+    }
+
+    void GpuDevice::createDrawTexture() {
+        TextureCI ci = {
+                .width = swapchainExtent.width,
+                .height = swapchainExtent.height,
+                .depth = 1,
+                .format = drawTextureFormat,
+                .type = VK_IMAGE_TYPE_2D,
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .offscreenDraw = true,
+        };
+        drawTexture = createTexture(ci);
+    }
+
+    void GpuDevice::destroyDrawTexture() {
+        destroyTexture(drawTexture);
     }
 }

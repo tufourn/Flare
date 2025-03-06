@@ -7,6 +7,8 @@ namespace Flare {
     struct GpuDevice;
 
     struct LightingPassInputs {
+        Handle<Texture> drawTexture;
+
         Handle<Buffer> cameraBuffer;
         Handle<Buffer> lightBuffer;
 
@@ -15,7 +17,6 @@ namespace Flare {
         Handle<Texture> gBufferOcclusionMetallicRoughness;
         Handle<Texture> gBufferEmissive;
         Handle<Texture> gBufferDepth;
-        Handle<Texture> gBufferPosition;
 
         Handle<Texture> shadowMap;
         Handle<Sampler> shadowSampler;
@@ -48,10 +49,6 @@ namespace Flare {
 
         void render(VkCommandBuffer cmd);
 
-        void generateRenderTarget();
-
-        void destroyRenderTarget();
-
         void setInputs(const LightingPassInputs& inputs);
 
         GpuDevice *gpu = nullptr;
@@ -59,8 +56,6 @@ namespace Flare {
         PipelineCI pipelineCI;
         Handle<Pipeline> pipelineHandle;
         Handle<Texture> targetHandle;
-
-        LightingPassInputs inputs;
 
         PushConstants pc{};
 

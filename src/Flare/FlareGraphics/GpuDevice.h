@@ -113,6 +113,10 @@ namespace Flare {
 
         void destroyDefaultTextures();
 
+        void createDrawTexture();
+
+        void destroyDrawTexture();
+
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
 
@@ -162,6 +166,9 @@ namespace Flare {
         std::array<VkDescriptorSet, SET_COUNT> bindlessDescriptorSets;
 
         VmaAllocator allocator;
+
+        VkFormat drawTextureFormat = VK_FORMAT_R32G32B32A32_SFLOAT;
+        Handle<Texture> drawTexture;
 
         Handle<Buffer> stagingBufferHandle;
         Handle<Sampler> defaultSampler;

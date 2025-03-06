@@ -39,9 +39,9 @@ namespace Flare {
         Handle<Pipeline> pipelineHandle;
 
         PushConstants pc;
-        Handle<Buffer> indexBuffer;
-        Handle<Buffer> indirectDrawBuffer;
-        Handle<Buffer> countBuffer;
+        Handle<Buffer> indexBufferHandle;
+        Handle<Buffer> indirectDrawBufferHandle;
+        Handle<Buffer> countBufferHandle;
         uint32_t maxDrawCount = UINT32_MAX;
     };
 }

@@ -179,7 +179,6 @@ struct TriangleApp : Application {
 
                     gpu.resizeSwapchain();
                     gBufferPass.generateRenderTargets();
-                    lightingPass.generateRenderTarget();
                 }
 
                 camera.update();
@@ -280,6 +279,7 @@ struct TriangleApp : Application {
 
                 // lighting
                 LightingPassInputs lightingPassInputs = {
+                        .drawTexture = gpu.drawTexture,
                         .cameraBuffer = cameraDataRingBuffer.buffer(),
                         .lightBuffer = lightDataRingBuffer.buffer(),
 
@@ -301,7 +301,7 @@ struct TriangleApp : Application {
                 SkyboxInputs skyboxInputs = {
                         .projection = projection,
                         .view = view,
-                        .colorAttachment = lightingPass.targetHandle,
+                        .colorAttachment = gpu.drawTexture,
                         .depthAttachment = gBufferPass.depthTargetHandle,
                 };
                 skyboxPass.setInputs(skyboxInputs);
@@ -322,12 +322,12 @@ struct TriangleApp : Application {
                 // gbuffer pass
                 gBufferPass.render(cmd);
 
-                // lighting pass
-                lightingPass.render(cmd);
-
-                VkHelper::transitionImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
+                VkHelper::transitionImage(cmd, gpu.getTexture(gpu.drawTexture)->image,
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+                // lighting pass
+                lightingPass.render(cmd);
 
                 // skybox pass
                 if (shouldRenderSkybox) {
@@ -348,9 +348,9 @@ struct TriangleApp : Application {
                 ImGui::End();
 
                 ImGui::Render();
-                imgui.draw(cmd, gpu.getTexture(lightingPass.targetHandle)->imageView);
+                imgui.draw(cmd, gpu.getTexture(gpu.drawTexture)->imageView);
 
-                VkHelper::transitionImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
+                VkHelper::transitionImage(cmd, gpu.getTexture(gpu.drawTexture)->image,
                                           VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 
@@ -358,7 +358,7 @@ struct TriangleApp : Application {
                                           VK_IMAGE_LAYOUT_UNDEFINED,
                                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-                VkHelper::copyImageToImage(cmd, gpu.getTexture(lightingPass.targetHandle)->image,
+                VkHelper::copyImageToImage(cmd, gpu.getTexture(gpu.drawTexture)->image,
                                            gpu.swapchainImages[gpu.swapchainImageIndex],
                                            gpu.swapchainExtent, gpu.swapchainExtent);
 

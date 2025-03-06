@@ -11,7 +11,7 @@ namespace Flare {
                 {"CoreShaders/LightingPass.frag",       VK_SHADER_STAGE_FRAGMENT_BIT},
         };
         pipelineCI.rendering.colorFormats = {
-                VK_FORMAT_R32G32B32A32_SFLOAT,
+                gpu->drawTextureFormat,
         };
         pipelineHandle = gpu->createPipeline(pipelineCI);
 
@@ -23,38 +23,12 @@ namespace Flare {
         };
         uniformRingBuffer.init(gpu, FRAMES_IN_FLIGHT, uniformCI);
 
-        generateRenderTarget();
-
         loaded = true;
     }
 
     void LightingPass::shutdown() {
-        destroyRenderTarget();
         gpu->destroyPipeline(pipelineHandle);
         uniformRingBuffer.shutdown();
-    }
-
-    void LightingPass::generateRenderTarget() {
-        if (loaded) {
-            destroyRenderTarget();
-        }
-
-        TextureCI targetCI = {
-                .width = gpu->swapchainExtent.width,
-                .height = gpu->swapchainExtent.height,
-                .depth = 1,
-                .format = VK_FORMAT_R32G32B32A32_SFLOAT,
-                .type = VK_IMAGE_TYPE_2D,
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .name = "lighting pass",
-                .offscreenDraw = true,
-        };
-        targetHandle = gpu->createTexture(targetCI);
-
-    }
-
-    void LightingPass::destroyRenderTarget() {
-        gpu->destroyTexture(targetHandle);
     }
 
     void LightingPass::render(VkCommandBuffer cmd) {
@@ -62,10 +36,6 @@ namespace Flare {
 
         VkRenderingAttachmentInfo colorAttachment = VkHelper::colorAttachment(gpu->getTexture(targetHandle)->imageView);
         VkRenderingInfo renderingInfo = VkHelper::renderingInfo(gpu->swapchainExtent, 1, &colorAttachment);
-
-        VkHelper::transitionImage(cmd, gpu->getTexture(targetHandle)->image,
-                                  VK_IMAGE_LAYOUT_UNDEFINED,
-                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
         vkCmdBeginRendering(cmd, &renderingInfo);
         vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
@@ -85,13 +55,11 @@ namespace Flare {
         vkCmdDraw(cmd, 3, 1, 0, 0); // fullscreen triangle
 
         vkCmdEndRendering(cmd);
-
-        VkHelper::transitionImage(cmd, gpu->getTexture(targetHandle)->image, // barrier
-                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     }
 
     void LightingPass::setInputs(const LightingPassInputs &inputs) {
+        targetHandle = inputs.drawTexture;
+
         uniformRingBuffer.moveToNextBuffer();
 
         pc.uniformOffset = uniformRingBuffer.buffer().index;

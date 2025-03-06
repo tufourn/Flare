@@ -83,7 +83,7 @@ namespace Flare {
 
         if (enable) {
             vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
-            vkCmdBindIndexBuffer(cmd, gpu->getBuffer(indexBuffer)->buffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindIndexBuffer(cmd, gpu->getBuffer(indexBufferHandle)->buffer, 0, VK_INDEX_TYPE_UINT32);
 
             vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
                                     gpu->bindlessDescriptorSets.size(), gpu->bindlessDescriptorSets.data(),
@@ -97,8 +97,8 @@ namespace Flare {
 
             vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0, sizeof(PushConstants), &pc);
 
-            vkCmdDrawIndexedIndirectCount(cmd, gpu->getBuffer(indirectDrawBuffer)->buffer, 0,
-                                          gpu->getBuffer(countBuffer)->buffer, 0, maxDrawCount,
+            vkCmdDrawIndexedIndirectCount(cmd, gpu->getBuffer(indirectDrawBufferHandle)->buffer, 0,
+                                          gpu->getBuffer(countBufferHandle)->buffer, 0, maxDrawCount,
                                           sizeof(IndirectDrawData));
         }
 
@@ -115,9 +115,9 @@ namespace Flare {
         pc.data2 = inputs.transformBuffer.index;
         pc.data3 = inputs.lightBuffer.index;
 
-        indexBuffer = inputs.indexBuffer;
-        indirectDrawBuffer = inputs.indirectDrawBuffer;
-        countBuffer = inputs.countBuffer;
+        indexBufferHandle = inputs.indexBuffer;
+        indirectDrawBufferHandle = inputs.indirectDrawBuffer;
+        countBufferHandle = inputs.countBuffer;
         maxDrawCount = inputs.maxDrawCount;
     }
 }
