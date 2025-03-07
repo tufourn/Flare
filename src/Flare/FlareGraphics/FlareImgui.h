@@ -3,16 +3,16 @@
 #include <volk.h>
 
 namespace Flare {
-    struct GpuDevice;
+struct GpuDevice;
 
-    struct FlareImgui {
-        void init(GpuDevice* gpuDevice);
-        void shutdown();
+struct FlareImgui {
+  void init(GpuDevice *gpuDevice);
+  void shutdown();
 
-        void newFrame();
-        void draw(VkCommandBuffer cmd, VkImageView target);
+  void newFrame();
+  void draw(VkCommandBuffer cmd, VkImageView target);
 
-        GpuDevice* gpu;
-        VkDescriptorPool descriptorPool;
-    };
-}
+  GpuDevice *gpu;
+  VkDescriptorPool descriptorPool;
+};
+} // namespace Flare

@@ -4,44 +4,44 @@
 #include "../RingBuffer.h"
 
 namespace Flare {
-    struct GpuDevice;
+struct GpuDevice;
 
-    static constexpr uint32_t SHADOW_RESOLUTION = 2048;
+static constexpr uint32_t SHADOW_RESOLUTION = 2048;
 
-    struct ShadowInputs {
-        Handle<Buffer> positionBuffer;
-        Handle<Buffer> transformBuffer;
-        Handle<Buffer> lightBuffer;
+struct ShadowInputs {
+  Handle<Buffer> positionBuffer;
+  Handle<Buffer> transformBuffer;
+  Handle<Buffer> lightBuffer;
 
-        Handle<Buffer> indexBuffer;
-        Handle<Buffer> indirectDrawBuffer;
-        Handle<Buffer> countBuffer;
-        uint32_t maxDrawCount;
-    };
+  Handle<Buffer> indexBuffer;
+  Handle<Buffer> indirectDrawBuffer;
+  Handle<Buffer> countBuffer;
+  uint32_t maxDrawCount;
+};
 
-    struct ShadowPass {
-        void init(GpuDevice *gpuDevice);
+struct ShadowPass {
+  void init(GpuDevice *gpuDevice);
 
-        void shutdown();
+  void shutdown();
 
-        void setInputs(const ShadowInputs& inputs);
+  void setInputs(const ShadowInputs &inputs);
 
-        void render(VkCommandBuffer cmd);
+  void render(VkCommandBuffer cmd);
 
-        GpuDevice *gpu = nullptr;
+  GpuDevice *gpu = nullptr;
 
-        bool enable = true;
+  bool enable = true;
 
-        Handle<Texture> depthTextureHandle;
-        Handle<Sampler> samplerHandle;
+  Handle<Texture> depthTextureHandle;
+  Handle<Sampler> samplerHandle;
 
-        PipelineCI pipelineCI;
-        Handle<Pipeline> pipelineHandle;
+  PipelineCI pipelineCI;
+  Handle<Pipeline> pipelineHandle;
 
-        PushConstants pc;
-        Handle<Buffer> indexBufferHandle;
-        Handle<Buffer> indirectDrawBufferHandle;
-        Handle<Buffer> countBufferHandle;
-        uint32_t maxDrawCount = UINT32_MAX;
-    };
-}
+  PushConstants pc;
+  Handle<Buffer> indexBufferHandle;
+  Handle<Buffer> indirectDrawBufferHandle;
+  Handle<Buffer> countBufferHandle;
+  uint32_t maxDrawCount = UINT32_MAX;
+};
+} // namespace Flare

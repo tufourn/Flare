@@ -46,9 +46,9 @@ void main() {
     TextureIndex occlusionIndex = textureIndexAlias[textureIndex].textureIndices[mat.occlusionTextureOffset];
     float occlusion = GET_TEXTURE(occlusionIndex.textureIndex, occlusionIndex.samplerIndex, inUV).r;
 
-    outOcclusionMetallicRoughness.r = occlusion; // occlusion
-    outOcclusionMetallicRoughness.g = mat.metallicFactor * metallicRoughness.b; // metallic
-    outOcclusionMetallicRoughness.b = clamp(mat.roughnessFactor * metallicRoughness.g, 0.089, 1.0); // roughness
+    outOcclusionMetallicRoughness.r = occlusion;// occlusion
+    outOcclusionMetallicRoughness.g = mat.metallicFactor * metallicRoughness.b;// metallic
+    outOcclusionMetallicRoughness.b = clamp(mat.roughnessFactor * metallicRoughness.g, 0.089, 1.0);// roughness
 
     vec3 emissive = mat.emissiveFactor;
     TextureIndex emissiveIndex = textureIndexAlias[textureIndex].textureIndices[mat.emissiveTextureOffset];

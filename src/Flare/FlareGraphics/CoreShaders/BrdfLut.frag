@@ -14,8 +14,8 @@ float random(vec2 co)
     float a = 12.9898;
     float b = 78.233;
     float c = 43758.5453;
-    float dt= dot(co.xy ,vec2(a,b));
-    float sn= mod(dt,3.14);
+    float dt= dot(co.xy, vec2(a, b));
+    float sn= mod(dt, 3.14);
     return fract(sin(sn) * c);
 }
 
@@ -66,7 +66,7 @@ vec2 BRDF(float NoV, float roughness)
     vec3 V = vec3(sqrt(1.0 - NoV*NoV), 0.0, NoV);
 
     vec2 LUT = vec2(0.0);
-    for(uint i = 0u; i < NUM_SAMPLES; i++) {
+    for (uint i = 0u; i < NUM_SAMPLES; i++) {
         vec2 Xi = hammersley2d(i, NUM_SAMPLES);
         vec3 H = importanceSample_GGX(Xi, roughness, N);
         vec3 L = 2.0 * dot(V, H) * H - V;

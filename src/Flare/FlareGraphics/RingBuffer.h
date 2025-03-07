@@ -3,21 +3,21 @@
 #include "GpuResources.h"
 
 namespace Flare {
-    struct GpuDevice;
+struct GpuDevice;
 
-    struct RingBuffer {
-        void init(GpuDevice *gpu, uint32_t bufferCount, const BufferCI &ci);
+struct RingBuffer {
+  void init(GpuDevice *gpu, uint32_t bufferCount, const BufferCI &ci);
 
-        void shutdown();
+  void shutdown();
 
-        void moveToNextBuffer();
+  void moveToNextBuffer();
 
-        Handle<Buffer> buffer();
-        Handle<Buffer> buffer(uint32_t index);
+  Handle<Buffer> buffer();
+  Handle<Buffer> buffer(uint32_t index);
 
-        uint32_t ringSize;
-        GpuDevice* gpuDevice;
-        uint32_t ringIndex = 0;
-        std::vector<Handle<Buffer>> bufferRing;
-    };
-}
+  uint32_t ringSize;
+  GpuDevice *gpuDevice;
+  uint32_t ringIndex = 0;
+  std::vector<Handle<Buffer>> bufferRing;
+};
+} // namespace Flare
