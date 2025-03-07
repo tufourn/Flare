@@ -23,7 +23,6 @@ static constexpr uint32_t SAMPLED_IMAGES_SET = 2;
 static constexpr uint32_t STORAGE_IMAGES_SET = 3;
 static constexpr uint32_t SAMPLERS_SET = 4;
 static constexpr uint32_t ACCEL_STRUCT_SET = 5;
-static constexpr uint32_t SET_COUNT = 6;
 
 static constexpr size_t STAGING_BUFFER_SIZE_MB = 128;
 
@@ -148,6 +147,10 @@ struct GpuDevice {
   uint32_t swapchainImageIndex = 0;
   bool resized = false;
 
+  bool swapchainExtensionPresent = false;
+  bool accelStructExtensionPresent = false;
+  bool deferredHostOpExtensionPresent = false;
+
   uint32_t currentFrame = 0;
   uint64_t absoluteFrame = 0;
 
@@ -173,8 +176,8 @@ struct GpuDevice {
   uint32_t transferFamily;
 
   VkDescriptorPool bindlessDescriptorPool;
-  std::array<VkDescriptorSetLayout, SET_COUNT> bindlessDescriptorSetLayouts;
-  std::array<VkDescriptorSet, SET_COUNT> bindlessDescriptorSets;
+  std::vector<VkDescriptorSetLayout> bindlessDescriptorSetLayouts;
+  std::vector<VkDescriptorSet> bindlessDescriptorSets;
 
   VmaAllocator allocator;
 

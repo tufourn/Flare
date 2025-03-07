@@ -196,11 +196,6 @@ void GpuDevice::init(GpuDeviceCreateInfo &gpuDeviceCI) {
                                       &physicalDeviceMemoryProperties);
   spdlog::info("GpuDevice: Using {}", physicalDeviceProperties.deviceName);
 
-  if (physicalDeviceProperties.limits.maxBoundDescriptorSets < SET_COUNT) {
-    spdlog::error(
-        "Physical device does not support enough bounded descriptor sets");
-  }
-
   // queues, separate family for each queue, todo: same family for queues in
   // case can't find separate family
   uint32_t queueFamilyCount = 0;
@@ -303,9 +298,9 @@ void GpuDevice::init(GpuDeviceCreateInfo &gpuDeviceCI) {
 
   std::vector<const char *> enabledDeviceExtensions;
 
-  bool swapchainExtensionPresent = false;
-  bool accelStructExtensionPresent = false;
-  bool deferredHostOpExtensionPresent = false;
+  swapchainExtensionPresent = false;
+  accelStructExtensionPresent = false;
+  deferredHostOpExtensionPresent = false;
 
   for (size_t i = 0; i < deviceExtensionCount; i++) {
     if (strcmp(deviceExtensions[i].extensionName,
@@ -346,28 +341,30 @@ void GpuDevice::init(GpuDeviceCreateInfo &gpuDeviceCI) {
       .pNext = &dynamicRenderingFeatures,
   };
 
-  VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{
-      .sType =
-          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-      .pNext = &synchronization2Features,
-  };
-
   VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParamFeatures{
       .sType =
           VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
-      .pNext = &accelStructFeatures,
+      .pNext = &synchronization2Features,
+  };
+
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR accelStructFeatures{
+      .sType =
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+      .pNext = &shaderDrawParamFeatures,
   };
 
   VkPhysicalDeviceVulkan12Features features12 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      .pNext = &shaderDrawParamFeatures,
+      .pNext = accelStructExtensionPresent
+                   ? static_cast<void *>(&accelStructFeatures)
+                   : static_cast<void *>(&shaderDrawParamFeatures),
       .drawIndirectCount = VK_TRUE,
       .descriptorIndexing = VK_TRUE,
       .timelineSemaphore = VK_TRUE,
       .bufferDeviceAddress = VK_TRUE,
   };
 
-  VkPhysicalDeviceFeatures2 features{
+  VkPhysicalDeviceFeatures2 features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
       .pNext = &features12,
   };
@@ -1543,31 +1540,77 @@ void GpuDevice::submitImmediate(VkCommandBuffer cmd) {
 }
 
 void GpuDevice::createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci) {
-  const std::array<VkDescriptorPoolSize, SET_COUNT> poolSizes = {
-      VkDescriptorPoolSize{
+  std::vector<VkDescriptorPoolSize> poolSizes = {
+      {
           .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
           .descriptorCount = ci.bindlessSetup.uniformBuffers,
       },
-      VkDescriptorPoolSize{
+      {
           .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
           .descriptorCount = ci.bindlessSetup.storageBuffers,
       },
-      VkDescriptorPoolSize{
+      {
           .type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
           .descriptorCount = ci.bindlessSetup.sampledImages,
       },
-      VkDescriptorPoolSize{
+      {
           .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
           .descriptorCount = ci.bindlessSetup.storageImages,
       },
-      VkDescriptorPoolSize{
+      {
           .type = VK_DESCRIPTOR_TYPE_SAMPLER,
           .descriptorCount = ci.bindlessSetup.samplers,
       },
-      VkDescriptorPoolSize{
-          .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-          .descriptorCount = ci.bindlessSetup.accelStructs,
-      }};
+  };
+
+  std::vector<VkDescriptorSetLayoutBinding> bindlessBindings = {
+      {
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = ci.bindlessSetup.uniformBuffers,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+      },
+      {
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+          .descriptorCount = ci.bindlessSetup.storageBuffers,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+      },
+      {
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+          .descriptorCount = ci.bindlessSetup.sampledImages,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+      },
+      {
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+          .descriptorCount = ci.bindlessSetup.storageImages,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+      },
+      {
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+          .descriptorCount = ci.bindlessSetup.samplers,
+          .stageFlags = VK_SHADER_STAGE_ALL,
+      },
+  };
+
+  bindlessDescriptorSets.resize(bindlessBindings.size());
+  bindlessDescriptorSetLayouts.resize(bindlessBindings.size());
+
+  if (accelStructExtensionPresent && deferredHostOpExtensionPresent) {
+    poolSizes.push_back({
+        .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+        .descriptorCount = ci.bindlessSetup.accelStructs,
+    });
+    bindlessBindings.push_back({
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+        .descriptorCount = ci.bindlessSetup.accelStructs,
+        .stageFlags = VK_SHADER_STAGE_ALL,
+    });
+  }
 
   uint32_t setCount =
       ci.bindlessSetup.uniformBuffers + ci.bindlessSetup.storageBuffers +
@@ -1579,7 +1622,7 @@ void GpuDevice::createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci) {
       .pNext = nullptr,
       .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
       .maxSets = setCount,
-      .poolSizeCount = poolSizes.size(),
+      .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
       .pPoolSizes = poolSizes.data(),
   };
 
@@ -1587,44 +1630,6 @@ void GpuDevice::createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci) {
                              &bindlessDescriptorPool) != VK_SUCCESS) {
     spdlog::error("Failed to create bindless descriptor pool");
   }
-
-  const std::array<VkDescriptorSetLayoutBinding, SET_COUNT> bindlessBindings = {
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .descriptorCount = ci.bindlessSetup.uniformBuffers,
-          .stageFlags = VK_SHADER_STAGE_ALL,
-      },
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-          .descriptorCount = ci.bindlessSetup.storageBuffers,
-          .stageFlags = VK_SHADER_STAGE_ALL,
-      },
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-          .descriptorCount = ci.bindlessSetup.sampledImages,
-          .stageFlags = VK_SHADER_STAGE_ALL,
-      },
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-          .descriptorCount = ci.bindlessSetup.storageImages,
-          .stageFlags = VK_SHADER_STAGE_ALL,
-      },
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-          .descriptorCount = ci.bindlessSetup.samplers,
-          .stageFlags = VK_SHADER_STAGE_ALL,
-      },
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-          .descriptorCount = ci.bindlessSetup.accelStructs,
-          .stageFlags = VK_SHADER_STAGE_ALL,
-      }};
 
   VkDescriptorBindingFlags flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                                    VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
