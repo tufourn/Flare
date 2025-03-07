@@ -148,7 +148,7 @@ struct TriangleApp : Application {
         BufferCI cameraCI = {
                 .size = sizeof(CameraData),
                 .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                .name = "lightData",
+                .name = "camera",
                 .bufferType = BufferType::eUniform,
         };
         cameraDataRingBuffer.init(&gpu, FRAMES_IN_FLIGHT, cameraCI);
@@ -322,9 +322,7 @@ struct TriangleApp : Application {
                 // gbuffer pass
                 gBufferPass.render(cmd);
 
-                VkHelper::transitionImage(cmd, gpu.getTexture(gpu.drawTexture)->image,
-                                          VK_IMAGE_LAYOUT_UNDEFINED,
-                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+                gpu.transitionDrawTextureToColorAttachment(cmd);
 
                 // lighting pass
                 lightingPass.render(cmd);
@@ -350,21 +348,10 @@ struct TriangleApp : Application {
                 ImGui::Render();
                 imgui.draw(cmd, gpu.getTexture(gpu.drawTexture)->imageView);
 
-                VkHelper::transitionImage(cmd, gpu.getTexture(gpu.drawTexture)->image,
-                                          VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-                                          VK_IMAGE_LAYOUT_UNDEFINED,
-                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-                VkHelper::copyImageToImage(cmd, gpu.getTexture(gpu.drawTexture)->image,
-                                           gpu.swapchainImages[gpu.swapchainImageIndex],
-                                           gpu.swapchainExtent, gpu.swapchainExtent);
-
-                VkHelper::transitionImage(cmd, gpu.swapchainImages[gpu.swapchainImageIndex],
-                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                          VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+                gpu.transitionDrawTextureToTransferSrc(cmd);
+                gpu.transitionSwapchainTextureToTransferDst(cmd);
+                gpu.copyDrawTextureToSwapchain(cmd);
+                gpu.transitionSwapchainTextureToPresentSrc(cmd);
 
                 vkEndCommandBuffer(cmd);
 

@@ -1808,4 +1808,105 @@ namespace Flare {
     void GpuDevice::destroyDrawTexture() {
         destroyTexture(drawTexture);
     }
+
+    void GpuDevice::transitionDrawTextureToColorAttachment(VkCommandBuffer cmd) {
+        VkImageMemoryBarrier2 barrier = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                .srcAccessMask = 0,
+                .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .image = getTexture(drawTexture)->image,
+                .subresourceRange = VkHelper::subresourceRange(),
+        };
+
+        VkDependencyInfo dependencyInfo = {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &barrier,
+        };
+
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    void GpuDevice::transitionDrawTextureToTransferSrc(VkCommandBuffer cmd) {
+        VkImageMemoryBarrier2 barrier = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+                .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .image = getTexture(drawTexture)->image,
+                .subresourceRange = VkHelper::subresourceRange(),
+        };
+
+        VkDependencyInfo dependencyInfo = {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &barrier,
+        };
+
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    void GpuDevice::transitionSwapchainTextureToTransferDst(VkCommandBuffer cmd) {
+        VkImageMemoryBarrier2 barrier = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+                .srcAccessMask = 0,
+                .dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+                .dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .image = swapchainImages[swapchainImageIndex],
+                .subresourceRange = VkHelper::subresourceRange(),
+        };
+
+        VkDependencyInfo dependencyInfo = {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &barrier,
+        };
+
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    void GpuDevice::transitionSwapchainTextureToPresentSrc(VkCommandBuffer cmd) {
+        VkImageMemoryBarrier2 barrier = {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .pNext = nullptr,
+                .srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT,
+                .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+                .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                .image = swapchainImages[swapchainImageIndex],
+                .subresourceRange = VkHelper::subresourceRange(),
+        };
+
+        VkDependencyInfo dependencyInfo = {
+                .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .pNext = nullptr,
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &barrier,
+        };
+
+        vkCmdPipelineBarrier2(cmd, &dependencyInfo);
+    }
+
+    void GpuDevice::copyDrawTextureToSwapchain(VkCommandBuffer cmd) {
+        VkHelper::copyImageToImage(cmd, getTexture(drawTexture)->image, swapchainImages[swapchainImageIndex],
+                                   swapchainExtent, swapchainExtent);
+    }
 }

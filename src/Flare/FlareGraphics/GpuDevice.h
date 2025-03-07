@@ -117,6 +117,16 @@ namespace Flare {
 
         void destroyDrawTexture();
 
+        void transitionDrawTextureToColorAttachment(VkCommandBuffer cmd);
+
+        void transitionDrawTextureToTransferSrc(VkCommandBuffer cmd);
+
+        void transitionSwapchainTextureToTransferDst(VkCommandBuffer cmd);
+
+        void transitionSwapchainTextureToPresentSrc(VkCommandBuffer cmd);
+
+        void copyDrawTextureToSwapchain(VkCommandBuffer cmd);
+
         VkInstance instance;
         VkDebugUtilsMessengerEXT debugMessenger;
 
