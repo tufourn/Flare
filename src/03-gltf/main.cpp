@@ -35,10 +35,10 @@ struct TriangleApp : Application {
         gpu.init(gpuDeviceCI);
 
 //        gltf.init("assets/BoxTextured.gltf", &gpu);
-//        gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
-//        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
+        // gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
+        gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
 //        gltf.init("assets/structure.glb", &gpu);
-        gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
+        // gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
 
         BufferCI positionsCI = {
                 .initialData = gltf.positions.data(),

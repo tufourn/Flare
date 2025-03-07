@@ -306,16 +306,14 @@ namespace Flare {
         if (!swapchainExtensionPresent) {
             spdlog::error("GpuDevice: Swapchain extension not present");
         }
-        if (!accelStructExtensionPresent) {
-            spdlog::error("GpuDevice: Acceleration structure extension not present");
+        if (accelStructExtensionPresent) {
+            enabledDeviceExtensions.emplace_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
         }
-        if (!deferredHostOpExtensionPresent) {
-            spdlog::error("GpuDevice: Deferred host operations extension not present");
+        if (deferredHostOpExtensionPresent) {
+            enabledDeviceExtensions.emplace_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
         }
 
         enabledDeviceExtensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-        enabledDeviceExtensions.emplace_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-        enabledDeviceExtensions.emplace_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
 
         // device features
         VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{

@@ -1,6 +1,8 @@
 #include <cmath>
 #include "VkHelper.h"
 
+#include <algorithm>
+
 namespace VkHelper {
     void transitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout initialLayout, VkImageLayout finalLayout) {
         // this uses all commands stage flag which is not optimal
