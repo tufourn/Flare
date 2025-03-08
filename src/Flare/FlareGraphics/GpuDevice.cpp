@@ -1596,9 +1596,6 @@ void GpuDevice::createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci) {
       },
   };
 
-  bindlessDescriptorSets.resize(bindlessBindings.size());
-  bindlessDescriptorSetLayouts.resize(bindlessBindings.size());
-
   if (accelStructExtensionPresent && deferredHostOpExtensionPresent) {
     poolSizes.push_back({
         .type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
@@ -1611,6 +1608,9 @@ void GpuDevice::createBindlessDescriptorSets(const GpuDeviceCreateInfo &ci) {
         .stageFlags = VK_SHADER_STAGE_ALL,
     });
   }
+
+  bindlessDescriptorSets.resize(bindlessBindings.size());
+  bindlessDescriptorSetLayouts.resize(bindlessBindings.size());
 
   uint32_t setCount =
       ci.bindlessSetup.uniformBuffers + ci.bindlessSetup.storageBuffers +
