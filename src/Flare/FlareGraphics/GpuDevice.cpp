@@ -1240,7 +1240,11 @@ Handle<Buffer> GpuDevice::createBuffer(const BufferCI &ci) {
   }
 
   if (ci.initialData) {
-    uploadBufferData(handle, ci.initialData);
+    if (ci.mapped) {
+       memcpy(buffer->allocationInfo.pMappedData, ci.initialData, ci.size);
+    } else {
+      uploadBufferData(handle, ci.initialData);
+    }
   }
 
   VkDescriptorBufferInfo descBuf = {

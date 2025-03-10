@@ -7,6 +7,7 @@
 #include "FlareGraphics/GltfScene.h"
 #include "FlareGraphics/GpuDevice.h"
 #include "FlareGraphics/LightData.h"
+#include "FlareGraphics/ModelManager.h"
 #include "FlareGraphics/Passes/FrustumCullPass.h"
 #include "FlareGraphics/Passes/GBufferPass.h"
 #include "FlareGraphics/Passes/LightingPass.h"
@@ -31,117 +32,20 @@ struct TriangleApp : Application {
 
     gpu.init(gpuDeviceCI);
 
-    //        gltf.init("assets/BoxTextured.gltf", &gpu);
-    // gltf.init("assets/DamagedHelmet/DamagedHelmet.glb", &gpu);
-    gltf.init("assets/CesiumMilkTruck.gltf", &gpu);
-    //        gltf.init("assets/structure.glb", &gpu);
-    // gltf.init("assets/Sponza/glTF/Sponza.gltf", &gpu);
+    modelManager.init(&gpu, 100, 100);
+    culledIndirectDrawRingBuffer.init(&gpu, FRAMES_IN_FLIGHT);
 
-    BufferCI positionsCI = {
-        .initialData = gltf.positions.data(),
-        .size = sizeof(glm::vec4) * gltf.positions.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        .name = "positions",
-    };
-    positionBufferHandle = gpu.createBuffer(positionsCI);
+    Handle<ModelPrefab> boxHandle =
+        modelManager.loadPrefab("assets/BoxTextured.gltf");
+    Handle<ModelInstance> boxInstance = modelManager.addInstance(
+        boxHandle, glm::translate(glm::mat4(1.f), glm::vec3(-2.f, 0.f, 0.f)));
+    Handle<ModelInstance> boxInstance2 =
+        modelManager.addInstance(boxHandle, glm::mat4(1.f));
 
-    BufferCI indicesCI = {
-        .initialData = gltf.indices.data(),
-        .size = sizeof(uint32_t) * gltf.indices.size(),
-        .usageFlags =
-            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        .name = "indices",
-    };
-    indexBufferHandle = gpu.createBuffer(indicesCI);
-
-    BufferCI textureIndicesCI = {
-        .initialData = gltf.gltfTextures.data(),
-        .size = sizeof(GltfTexture) * gltf.gltfTextures.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        .name = "textures",
-    };
-    textureBufferHandle = gpu.createBuffer(textureIndicesCI);
-
-    BufferCI uvCI = {
-        .initialData = gltf.uvs.data(),
-        .size = sizeof(glm::vec2) * gltf.uvs.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        .name = "uv",
-    };
-    uvBufferHandle = gpu.createBuffer(uvCI);
-
-    BufferCI tangentCI = {
-        .initialData = gltf.tangents.data(),
-        .size = sizeof(glm::vec4) * gltf.tangents.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        .name = "tangents",
-    };
-    tangentBufferHandle = gpu.createBuffer(tangentCI);
-
-    BufferCI transformsCI = {
-        .initialData = gltf.transforms.data(),
-        .size = sizeof(glm::mat4) * gltf.transforms.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        .name = "transforms",
-    };
-    transformBufferHandle = gpu.createBuffer(transformsCI);
-
-    BufferCI materialCI = {
-        .initialData = gltf.materials.data(),
-        .size = sizeof(Material) * gltf.materials.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-        .name = "materials",
-    };
-    materialBufferHandle = gpu.createBuffer(materialCI);
-
-    BufferCI normalCI = {
-        .initialData = gltf.normals.data(),
-        .size = sizeof(glm::vec4) * gltf.normals.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        .name = "normals",
-    };
-    normalBufferHandle = gpu.createBuffer(normalCI);
-
-    indirectDrawDatas.resize(gltf.meshDraws.size());
-    BufferCI indirectDrawCI = {
-        .size = sizeof(IndirectDrawData) * gltf.meshDraws.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-        .mapped = true,
-        .name = "indirectDraws",
-    };
-    indirectDrawDataBufferHandle = gpu.createBuffer(indirectDrawCI);
-
-    BufferCI culledIndirectDrawCI = {
-        .size = sizeof(IndirectDrawData) * indirectDrawDatas.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-        .name = "culledIndirectDraws",
-    };
-    culledIndirectDrawDataBufferHandle = gpu.createBuffer(culledIndirectDrawCI);
-
-    BufferCI indirectCountCI = {
-        .size = sizeof(uint32_t),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-        .mapped = true,
-        .name = "indirectCount",
-    };
-    countBufferHandle = gpu.createBuffer(indirectCountCI);
-
-    bounds.resize(gltf.meshDraws.size());
-    BufferCI boundCI = {
-        .size = sizeof(Bounds) * gltf.meshDraws.size(),
-        .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-                      VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
-        .mapped = true,
-        .name = "bounds",
-    };
-    boundsBufferHandle = gpu.createBuffer(boundCI);
+    Handle<ModelPrefab> carHandle =
+        modelManager.loadPrefab("assets/CesiumMilkTruck.gltf");
+    Handle<ModelInstance> carInstance = modelManager.addInstance(
+        carHandle, glm::translate(glm::mat4(1.f), glm::vec3(4.f, 2.f, 0.f)));
 
     BufferCI lightCI = {
         .size = sizeof(LightData),
@@ -178,6 +82,7 @@ struct TriangleApp : Application {
   void loop() override {
     while (!window.shouldClose()) {
       window.newFrame();
+      modelManager.newFrame();
 
       if (!window.isMinimized()) {
         if (window.shouldResize) {
@@ -193,36 +98,6 @@ struct TriangleApp : Application {
         gpu.newFrame();
         imgui.newFrame();
 
-        for (size_t i = 0; i < gltf.meshDraws.size(); i++) {
-          const MeshDraw &md = gltf.meshDraws[i];
-
-          indirectDrawDatas[i] = {
-              .cmd =
-                  {
-                      .indexCount = md.indexCount,
-                      .instanceCount = 1,
-                      .firstIndex = md.indexOffset,
-                      .vertexOffset = static_cast<int32_t>(md.vertexOffset),
-                      .firstInstance = 0,
-                  },
-              .meshId = md.id,
-              .materialOffset = md.materialOffset,
-              .transformOffset = md.transformOffset,
-          };
-
-          bounds[i] = md.bounds;
-        }
-
-        uint32_t meshCount = indirectDrawDatas.size();
-        memcpy(gpu.getBuffer(indirectDrawDataBufferHandle)
-                   ->allocationInfo.pMappedData,
-               indirectDrawDatas.data(),
-               sizeof(IndirectDrawData) * indirectDrawDatas.size());
-        memcpy(gpu.getBuffer(countBufferHandle)->allocationInfo.pMappedData,
-               &meshCount, sizeof(uint32_t));
-        memcpy(gpu.getBuffer(boundsBufferHandle)->allocationInfo.pMappedData,
-               bounds.data(), sizeof(Bounds) * bounds.size());
-
         glm::mat4 view = camera.getViewMatrix();
         glm::mat4 projection = camera.getProjectionMatrix();
 
@@ -237,30 +112,52 @@ struct TriangleApp : Application {
         // todo: frustum cull for shadows
         // shadows
         ShadowInputs shadowPassInputs = {
-            .positionBuffer = positionBufferHandle,
-            .transformBuffer = transformBufferHandle,
+            .positionBuffer = modelManager.positionBufferHandle,
+            .transformBuffer = modelManager.transformRingBuffer.buffer(),
             .lightBuffer = lightDataRingBuffer.buffer(),
 
-            .indexBuffer = indexBufferHandle,
-            .indirectDrawBuffer = indirectDrawDataBufferHandle,
-            .countBuffer = countBufferHandle,
-            .maxDrawCount = meshCount,
+            .indexBuffer = modelManager.indexBufferHandle,
+            .indirectDrawBuffer =
+                modelManager.indirectDrawDataRingBuffer.buffer(),
+            .countBuffer = modelManager.countRingBuffer.buffer(),
+            .maxDrawCount = modelManager.count,
         };
         shadowPass.setInputs(shadowPassInputs);
 
         // frustum cull
+        if (!culledIndirectDrawRingBuffer.buffer().isValid() ||
+            gpu.getBuffer(culledIndirectDrawRingBuffer.buffer())->size <
+                gpu.getBuffer(modelManager.indirectDrawDataRingBuffer.buffer())
+                    ->size) {
+          if (culledIndirectDrawRingBuffer.buffer().isValid()) {
+            gpu.destroyBuffer(culledIndirectDrawRingBuffer.buffer());
+          }
+
+          BufferCI indirectDrawsCI = {
+              .size = sizeof(IndirectDrawData) *
+                      modelManager.indirectDrawDatas.size(),
+              .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+                            VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+              .name = "culled indirect draws",
+          };
+          culledIndirectDrawRingBuffer
+              .bufferRing[culledIndirectDrawRingBuffer.ringIndex] =
+              gpu.createBuffer(indirectDrawsCI);
+        }
+
         Handle<Buffer> chosenIndirectDrawBufferHandle =
-            indirectDrawDataBufferHandle;
+            modelManager.indirectDrawDataRingBuffer.buffer();
         FrustumCullInputs frustumCullInputs = {
             .viewProjection = projection * view,
-            .inputIndirectDrawBuffer = indirectDrawDataBufferHandle,
-            .outputIndirectDrawBuffer = culledIndirectDrawDataBufferHandle,
-            .countBuffer = countBufferHandle,
-            .transformBuffer = transformBufferHandle,
-            .boundsBuffer = boundsBufferHandle,
+            .inputIndirectDrawBuffer =
+                modelManager.indirectDrawDataRingBuffer.buffer(),
+            .outputIndirectDrawBuffer = culledIndirectDrawRingBuffer.buffer(),
+            .countBuffer = modelManager.countRingBuffer.buffer(),
+            .boundsBuffer = modelManager.boundsRingBuffer.buffer(),
         };
         if (shouldFrustumCull) {
-          chosenIndirectDrawBufferHandle = culledIndirectDrawDataBufferHandle;
+          chosenIndirectDrawBufferHandle =
+              culledIndirectDrawRingBuffer.buffer();
           if (!fixedFrustum) {
             frustumCullPass.setInputs(frustumCullInputs);
           }
@@ -271,17 +168,17 @@ struct TriangleApp : Application {
             .viewProjection = projection * view,
             .meshDrawBuffers =
                 {
-                    .indices = indexBufferHandle,
-                    .positions = positionBufferHandle,
-                    .uvs = uvBufferHandle,
-                    .normals = normalBufferHandle,
-                    .tangents = tangentBufferHandle,
-                    .transforms = transformBufferHandle,
-                    .materials = materialBufferHandle,
-                    .textures = textureBufferHandle,
+                    .indices = modelManager.indexBufferHandle,
+                    .positions = modelManager.positionBufferHandle,
+                    .uvs = modelManager.uvBufferHandle,
+                    .normals = modelManager.normalBufferHandle,
+                    .tangents = modelManager.tangentBufferHandle,
+                    .transforms = modelManager.transformRingBuffer.buffer(),
+                    .materials = modelManager.materialBufferHandle,
+                    .textures = modelManager.textureIndexBufferHandle,
                     .indirectDraws = chosenIndirectDrawBufferHandle,
-                    .count = countBufferHandle,
-                    .drawCount = meshCount,
+                    .count = modelManager.countRingBuffer.buffer(),
+                    .drawCount = modelManager.count,
                 },
         };
         gBufferPass.setInputs(gBufferInputs);
@@ -324,7 +221,7 @@ struct TriangleApp : Application {
 
         // frustum cull
         if (shouldFrustumCull) {
-          // todo: implement compute queue, currently using the main queue here
+          // todo: implement compute queue, currently using the main queue
           frustumCullPass.cull(cmd);
           frustumCullPass.addBarriers(cmd, gpu.mainFamily, gpu.mainFamily);
         }
@@ -368,6 +265,7 @@ struct TriangleApp : Application {
 
         vkEndCommandBuffer(cmd);
 
+        culledIndirectDrawRingBuffer.moveToNextBuffer();
         lightDataRingBuffer.moveToNextBuffer();
         cameraDataRingBuffer.moveToNextBuffer();
 
@@ -385,6 +283,9 @@ struct TriangleApp : Application {
   void shutdown() override {
     vkDeviceWaitIdle(gpu.device);
 
+    modelManager.shutdown();
+    culledIndirectDrawRingBuffer.shutdown();
+
     shadowPass.shutdown();
     frustumCullPass.shutdown();
     skyboxPass.shutdown();
@@ -393,23 +294,8 @@ struct TriangleApp : Application {
 
     imgui.shutdown();
 
-    gltf.shutdown();
-
     lightDataRingBuffer.shutdown();
     cameraDataRingBuffer.shutdown();
-
-    gpu.destroyBuffer(positionBufferHandle);
-    gpu.destroyBuffer(indexBufferHandle);
-    gpu.destroyBuffer(transformBufferHandle);
-    gpu.destroyBuffer(uvBufferHandle);
-    gpu.destroyBuffer(textureBufferHandle);
-    gpu.destroyBuffer(materialBufferHandle);
-    gpu.destroyBuffer(normalBufferHandle);
-    gpu.destroyBuffer(indirectDrawDataBufferHandle);
-    gpu.destroyBuffer(culledIndirectDrawDataBufferHandle);
-    gpu.destroyBuffer(countBufferHandle);
-    gpu.destroyBuffer(tangentBufferHandle);
-    gpu.destroyBuffer(boundsBufferHandle);
 
     gpu.shutdown();
     window.shutdown();
@@ -429,26 +315,11 @@ struct TriangleApp : Application {
   CameraData cameraData;
   RingBuffer cameraDataRingBuffer;
 
-  Handle<Buffer> positionBufferHandle;
-  Handle<Buffer> indexBufferHandle;
-  Handle<Buffer> transformBufferHandle;
-  Handle<Buffer> uvBufferHandle;
-  Handle<Buffer> tangentBufferHandle;
-  Handle<Buffer> textureBufferHandle;
-  Handle<Buffer> materialBufferHandle;
-  Handle<Buffer> normalBufferHandle;
+  ModelManager modelManager;
 
-  std::vector<IndirectDrawData> indirectDrawDatas;
-  Handle<Buffer> indirectDrawDataBufferHandle;
-  Handle<Buffer> culledIndirectDrawDataBufferHandle;
-  Handle<Buffer> countBufferHandle;
-
-  std::vector<Bounds> bounds;
-  Handle<Buffer> boundsBufferHandle;
+  RingBuffer culledIndirectDrawRingBuffer;
 
   Camera camera;
-
-  GltfScene gltf;
 
   FlareImgui imgui;
 

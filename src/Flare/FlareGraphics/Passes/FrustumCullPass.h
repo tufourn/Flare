@@ -24,7 +24,6 @@ struct FrustumCullInputs {
   Handle<Buffer> inputIndirectDrawBuffer;
   Handle<Buffer> outputIndirectDrawBuffer;
   Handle<Buffer> countBuffer;
-  Handle<Buffer> transformBuffer;
   Handle<Buffer> boundsBuffer;
 };
 

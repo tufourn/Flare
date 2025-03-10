@@ -4,11 +4,14 @@
 
 namespace Flare {
 
-void RingBuffer::init(GpuDevice *gpu, uint32_t bufferCount,
-                      const BufferCI &ci) {
+void RingBuffer::init(GpuDevice *gpu, uint32_t bufferCount) {
   gpuDevice = gpu;
   ringSize = bufferCount;
   bufferRing.resize(bufferCount);
+}
+void RingBuffer::init(GpuDevice *gpu, uint32_t bufferCount,
+                      const BufferCI &ci) {
+  init(gpu, bufferCount);
 
   for (size_t i = 0; i < bufferCount; i++) {
     bufferRing[i] = gpuDevice->createBuffer(ci);
@@ -17,7 +20,9 @@ void RingBuffer::init(GpuDevice *gpu, uint32_t bufferCount,
 
 void RingBuffer::shutdown() {
   for (const auto &handle : bufferRing) {
-    gpuDevice->destroyBuffer(handle);
+    if (handle.isValid()) {
+      gpuDevice->destroyBuffer(handle);
+    }
   }
 }
 

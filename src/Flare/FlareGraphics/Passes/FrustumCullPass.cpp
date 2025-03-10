@@ -131,8 +131,7 @@ void FrustumCullPass::setInputs(const FrustumCullInputs &inputs) {
   pc.data0 = inputs.inputIndirectDrawBuffer.index;
   pc.data1 = inputs.outputIndirectDrawBuffer.index;
   pc.data2 = inputs.countBuffer.index;
-  pc.data3 = inputs.transformBuffer.index;
-  pc.data4 = inputs.boundsBuffer.index;
-  pc.data5 = maxDrawCount;
+  pc.data3 = inputs.boundsBuffer.index;
+  pc.data4 = maxDrawCount;
 }
 } // namespace Flare

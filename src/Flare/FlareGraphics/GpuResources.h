@@ -180,7 +180,6 @@ struct Light {
 struct IndirectDrawData {
   VkDrawIndexedIndirectCommand cmd;
 
-  uint32_t meshId;
   uint32_t materialOffset;
   uint32_t transformOffset;
 };
@@ -212,6 +211,10 @@ template <typename T> struct Handle {
   bool isValid() const { return index != invalidIndex; }
 
   void invalidate() { index = invalidIndex; }
+
+  bool operator==(const Handle<T> &other) const {
+    return other.index == index;
+  }
 };
 
 template <> struct Handle<Buffer> {
@@ -221,6 +224,10 @@ template <> struct Handle<Buffer> {
   bool isValid() const { return index != invalidIndex; }
 
   void invalidate() { index = invalidIndex; }
+
+  bool operator==(const Handle<Buffer> &other) const {
+    return other.index == index;
+  }
 };
 
 template <> struct Handle<Texture> {
@@ -232,6 +239,10 @@ template <> struct Handle<Texture> {
   void invalidate() {
     index = invalidIndex;
     storageIndex = invalidIndex;
+  }
+
+  bool operator==(const Handle<Texture> &other) const {
+    return other.index == index;
   }
 };
 

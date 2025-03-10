@@ -459,17 +459,13 @@ void GltfScene::init(const std::filesystem::path &path, GpuDevice *gpuDevice) {
     // todo: skins
   }
 
-  std::unordered_map<uint32_t, std::vector<MeshDraw>> meshDrawsMap;
   for (auto &node : nodes) {
     if (!node.parent) {
       topLevelNodes.push_back(&node);
-      generateMeshDrawsFromNode(&node, meshDrawsMap);
     }
   }
 
-  for (const auto &pair : meshDrawsMap) {
-    meshDraws.insert(meshDraws.end(), pair.second.begin(), pair.second.end());
-  }
+  meshDraws = generateMeshDraws();
 }
 
 void GltfScene::shutdown() {
@@ -529,6 +525,20 @@ void GltfScene::generateMeshDrawsFromNode(
   for (const auto &child : node->children) {
     generateMeshDrawsFromNode(child, map);
   }
+}
+std::vector<MeshDraw> GltfScene::generateMeshDraws() {
+  std::unordered_map<uint32_t, std::vector<MeshDraw>> meshDrawsMap;
+  for (auto &node : topLevelNodes) {
+    generateMeshDrawsFromNode(node, meshDrawsMap);
+  }
+
+  std::vector<MeshDraw> meshDraws;
+  meshDraws.clear();
+  for (const auto &pair : meshDrawsMap) {
+    meshDraws.insert(meshDraws.end(), pair.second.begin(), pair.second.end());
+  }
+
+  return meshDraws;
 }
 
 glm::mat4 Node::getLocalTransform() const {

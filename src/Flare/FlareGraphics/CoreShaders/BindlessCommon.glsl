@@ -80,7 +80,6 @@ struct IndirectDrawData {
     uint vertexOffset;
     uint firstInstance;
 
-    uint meshId;
     uint materialOffset;
     uint transformOffset;
 };

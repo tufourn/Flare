@@ -193,6 +193,8 @@ add_library(FlareGraphics
         src/Flare/FlareGraphics/LightData.h
         src/Flare/FlareGraphics/Passes/LightingPass.cpp
         src/Flare/FlareGraphics/Passes/LightingPass.h
+        src/Flare/FlareGraphics/ModelManager.cpp
+        src/Flare/FlareGraphics/ModelManager.h
 )
 target_link_libraries(FlareGraphics PRIVATE
         FlareExternal

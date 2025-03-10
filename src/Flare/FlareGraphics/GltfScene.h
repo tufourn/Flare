@@ -15,7 +15,7 @@ static constexpr uint32_t DEFAULT_NORMAL_BASE_OFFSET = 3;
 static constexpr uint32_t DEFAULT_OCCLUSION_BASE_OFFSET = 4;
 static constexpr uint32_t DEFAULT_EMISSIVE_BASE_OFFSET = 5;
 
-struct GltfTexture {
+struct TextureIndex {
   uint32_t imageIndex;
   uint32_t samplerIndex;
 };
@@ -90,10 +90,10 @@ struct Node {
 struct GltfScene {
   std::vector<Handle<Texture>> images;
   std::vector<Handle<Sampler>> samplers;
-  std::vector<GltfTexture> gltfTextures;
+  std::vector<TextureIndex> gltfTextures;
 
   std::vector<Node> nodes;
-  std::vector<const Node *> topLevelNodes;
+  std::vector<Node *> topLevelNodes;
   std::vector<GltfMesh> meshes;
   std::vector<Material> materials;
   std::vector<glm::vec4> positions;
@@ -114,5 +114,7 @@ struct GltfScene {
 
   void generateMeshDrawsFromNode(
       Node *node, std::unordered_map<uint32_t, std::vector<MeshDraw>> &map);
+
+  [[nodiscard]] std::vector<MeshDraw> generateMeshDraws();
 };
 } // namespace Flare

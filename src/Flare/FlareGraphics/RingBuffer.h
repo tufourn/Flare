@@ -6,6 +6,8 @@ namespace Flare {
 struct GpuDevice;
 
 struct RingBuffer {
+  void init(GpuDevice *gpu, uint32_t bufferCount);
+
   void init(GpuDevice *gpu, uint32_t bufferCount, const BufferCI &ci);
 
   void shutdown();
