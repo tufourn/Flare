@@ -109,15 +109,13 @@ void ModelManager::removePrefab(Handle<ModelPrefab> handle) {
   }
 }
 Handle<ModelInstance>
-ModelManager::addInstance(Handle<ModelPrefab> prefabHandle,
-                          glm::mat4 transform) {
+ModelManager::addInstance(Handle<ModelPrefab> prefabHandle) {
   Handle<ModelInstance> handle = modelInstances.obtain();
 
   ModelInstance *instance = modelInstances.get(handle);
   loadedInstances.push_back(handle);
 
   instance->prefabHandle = prefabHandle;
-  instance->modelTransform = transform;
 
   return handle;
 }
@@ -244,9 +242,24 @@ void ModelManager::newFrame() {
 
       indirectDrawDatas.push_back(indirectDrawData);
 
-      glm::mat4 transform =
-          instance->modelTransform *
-          prefab->gltfModel.transforms[meshDraw.transformOffset];
+      glm::mat4 transform = glm::mat4(1.0f); // Identity matrix
+
+      transform = glm::scale(transform, instance->scale);
+
+      transform =
+          glm::rotate(transform, glm::radians(instance->rotation.x),
+                      glm::vec3(1.f, 0.f, 0.f)); // Rotation around x-axis
+      transform =
+          glm::rotate(transform, glm::radians(instance->rotation.y),
+                      glm::vec3(0.f, 1.f, 0.f)); // Rotation around y-axis
+      transform =
+          glm::rotate(transform, glm::radians(instance->rotation.z),
+                      glm::vec3(0.f, 0.f, 1.f)); // Rotation around z-axis
+
+      transform = glm::translate(transform, instance->translation);
+
+      transform = transform * prefab->gltfModel.transforms[meshDraw.transformOffset];
+
       transforms.push_back(transform);
 
       Bounds newBounds = meshDraw.bounds;

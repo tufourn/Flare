@@ -16,8 +16,10 @@ struct ModelPrefab {
 };
 
 struct ModelInstance {
-  glm::mat4 modelTransform;
   Handle<ModelPrefab> prefabHandle;
+  glm::vec3 translation = {0.f, 0.f, 0.f};
+  glm::vec3 rotation = {0.f, 0.f, 0.f};
+  glm::vec3 scale = {1.f, 1.f, 1.f};
 };
 
 struct ModelManager {
@@ -28,8 +30,7 @@ struct ModelManager {
 
   void removePrefab(Handle<ModelPrefab> handle);
 
-  Handle<ModelInstance> addInstance(Handle<ModelPrefab> prefabHandle,
-                                    glm::mat4 transform);
+  Handle<ModelInstance> addInstance(Handle<ModelPrefab> prefabHandle);
 
   void destroyModelBuffers();
 
@@ -39,6 +40,10 @@ struct ModelManager {
 
   ModelPrefab *getPrefab(Handle<ModelPrefab> handle) {
     return modelPrefabs.get(handle);
+  }
+
+  ModelInstance *getInstance(Handle<ModelInstance> handle) {
+    return modelInstances.get(handle);
   }
 
   GpuDevice *gpu;
