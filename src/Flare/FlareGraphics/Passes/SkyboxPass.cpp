@@ -237,6 +237,13 @@ void SkyboxPass::render(VkCommandBuffer cmd) {
                           skyboxPipeline->pipelineLayout, 0,
                           gpu->bindlessDescriptorSets.size(),
                           gpu->bindlessDescriptorSets.data(), 0, nullptr);
+
+  VkViewport viewport = VkHelper::viewport(gpu->swapchainExtent);
+  vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+  VkRect2D scissor = VkHelper::scissor(gpu->swapchainExtent);
+  vkCmdSetScissor(cmd, 0, 1, &scissor);
+
   VkDeviceSize offsets[] = {0};
   vkCmdBindVertexBuffers(cmd, 0, 1, &gpu->getBuffer(vertexBufferHandle)->buffer,
                          offsets);

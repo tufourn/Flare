@@ -34,6 +34,15 @@ FetchContent_Declare(
         GIT_PROGRESS true
 )
 FetchContent_MakeAvailable(imgui)
+
+FetchContent_Declare(
+        imgui-file-dialog
+        GIT_REPOSITORY https://github.com/aiekick/ImGuiFileDialog.git
+        GIT_TAG master
+        GIT_PROGRESS true
+)
+FetchContent_MakeAvailable(imgui-file-dialog)
+
 add_library(flare-imgui STATIC
         ${imgui_SOURCE_DIR}/imgui.cpp
         ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -42,9 +51,14 @@ add_library(flare-imgui STATIC
         ${imgui_SOURCE_DIR}/imgui_widgets.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
         ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+        ${imgui-file-dialog_SOURCE_DIR}/ImGuiFileDialog.cpp
 )
 target_link_libraries(flare-imgui volk)
-target_include_directories(flare-imgui PUBLIC ${imgui_SOURCE_DIR} ${glfw_SOURCE_DIR}/include)
+target_include_directories(flare-imgui PUBLIC
+        ${imgui_SOURCE_DIR}
+        ${imgui-file-dialog_SOURCE_DIR}
+        ${glfw_SOURCE_DIR}/include
+)
 target_compile_definitions(flare-imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES IMGUI_IMPL_VULKAN_USE_VOLK)
 
 FetchContent_Declare(

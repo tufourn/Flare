@@ -165,41 +165,42 @@ void GBufferPass::render(VkCommandBuffer cmd) {
       VkHelper::renderingInfo(gpu->swapchainExtent, colorAttachments.size(),
                               colorAttachments.data(), &depthAttachment);
 
-  std::array<VkBuffer, 4> vertexBuffers = {
-      gpu->getBuffer(meshDrawBuffers.positions)->buffer,
-      gpu->getBuffer(meshDrawBuffers.uvs)->buffer,
-      gpu->getBuffer(meshDrawBuffers.normals)->buffer,
-      gpu->getBuffer(meshDrawBuffers.tangents)->buffer,
-  };
-  VkDeviceSize offsets[] = {0, 0, 0, 0};
-
   VkHelper::transitionImage(cmd, gpu->getTexture(albedoTargetHandle)->image,
                             VK_IMAGE_LAYOUT_UNDEFINED,
                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
   vkCmdBeginRendering(cmd, &renderingInfo);
-  vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
-  vkCmdBindIndexBuffer(cmd, gpu->getBuffer(meshDrawBuffers.indices)->buffer, 0,
-                       VK_INDEX_TYPE_UINT32);
-  vkCmdBindVertexBuffers(cmd, 0, vertexBuffers.size(), vertexBuffers.data(),
-                         offsets);
-  vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0,
-                     sizeof(PushConstants), &pc);
-  vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout, 0,
-                          gpu->bindlessDescriptorSets.size(),
-                          gpu->bindlessDescriptorSets.data(), 0, nullptr);
+  if (meshDrawBuffers.drawCount > 0) {
+    vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
+    vkCmdBindIndexBuffer(cmd, gpu->getBuffer(meshDrawBuffers.indices)->buffer,
+                         0, VK_INDEX_TYPE_UINT32);
 
-  VkViewport viewport = VkHelper::viewport(gpu->swapchainExtent);
-  vkCmdSetViewport(cmd, 0, 1, &viewport);
+    std::array<VkBuffer, 4> vertexBuffers = {
+        gpu->getBuffer(meshDrawBuffers.positions)->buffer,
+        gpu->getBuffer(meshDrawBuffers.uvs)->buffer,
+        gpu->getBuffer(meshDrawBuffers.normals)->buffer,
+        gpu->getBuffer(meshDrawBuffers.tangents)->buffer,
+    };
+    VkDeviceSize offsets[] = {0, 0, 0, 0};
+    vkCmdBindVertexBuffers(cmd, 0, vertexBuffers.size(), vertexBuffers.data(),
+                           offsets);
+    vkCmdPushConstants(cmd, pipeline->pipelineLayout, VK_SHADER_STAGE_ALL, 0,
+                       sizeof(PushConstants), &pc);
+    vkCmdBindDescriptorSets(cmd, pipeline->bindPoint, pipeline->pipelineLayout,
+                            0, gpu->bindlessDescriptorSets.size(),
+                            gpu->bindlessDescriptorSets.data(), 0, nullptr);
 
-  VkRect2D scissor = VkHelper::scissor(gpu->swapchainExtent);
-  vkCmdSetScissor(cmd, 0, 1, &scissor);
+    VkViewport viewport = VkHelper::viewport(gpu->swapchainExtent);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-  vkCmdDrawIndexedIndirectCount(
-      cmd, gpu->getBuffer(meshDrawBuffers.indirectDraws)->buffer, 0,
-      gpu->getBuffer(meshDrawBuffers.count)->buffer, 0,
-      meshDrawBuffers.drawCount, sizeof(IndirectDrawData));
+    VkRect2D scissor = VkHelper::scissor(gpu->swapchainExtent);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
 
+    vkCmdDrawIndexedIndirectCount(
+        cmd, gpu->getBuffer(meshDrawBuffers.indirectDraws)->buffer, 0,
+        gpu->getBuffer(meshDrawBuffers.count)->buffer, 0,
+        meshDrawBuffers.drawCount, sizeof(IndirectDrawData));
+  }
   vkCmdEndRendering(cmd);
   VkHelper::transitionImage(cmd, gpu->getTexture(albedoTargetHandle)->image,
                             VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,

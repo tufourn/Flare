@@ -25,6 +25,7 @@ struct FrustumCullInputs {
   Handle<Buffer> outputIndirectDrawBuffer;
   Handle<Buffer> countBuffer;
   Handle<Buffer> boundsBuffer;
+  uint32_t maxDrawCount;
 };
 
 struct FrustumCullPass {

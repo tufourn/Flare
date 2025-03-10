@@ -22,6 +22,10 @@ void FrustumCullPass::init(GpuDevice *gpuDevice) {
 
 void FrustumCullPass::addBarriers(VkCommandBuffer cmd, uint32_t computeFamily,
                                   uint32_t mainFamily) {
+  if (!outputIndirectBufferHandle.isValid() ||
+      !outputCountBufferHandle.isValid()) {
+    return;
+  }
   Buffer *outputIndirectDrawBuffer = gpu->getBuffer(outputIndirectBufferHandle);
   Buffer *outputCountBuffer = gpu->getBuffer(outputCountBufferHandle);
 
@@ -71,6 +75,9 @@ void FrustumCullPass::shutdown() {
 }
 
 void FrustumCullPass::cull(VkCommandBuffer cmd) {
+  if (maxDrawCount == 0) {
+    return;
+  }
   Pipeline *pipeline = gpu->getPipeline(pipelineHandle);
 
   pc.uniformOffset = frustumUniformRingBuffer.buffer().index;
@@ -123,8 +130,7 @@ void FrustumCullPass::setInputs(const FrustumCullInputs &inputs) {
       FrustumCullPass::getFrustumPlanes(inputs.viewProjection);
   gpu->uploadBufferData(frustumUniformRingBuffer.buffer(), &uniforms);
 
-  maxDrawCount = gpu->getBuffer(inputs.inputIndirectDrawBuffer)->size /
-                 sizeof(IndirectDrawData);
+  maxDrawCount = inputs.maxDrawCount;
   outputIndirectBufferHandle = inputs.outputIndirectDrawBuffer;
   outputCountBufferHandle = inputs.countBuffer;
 

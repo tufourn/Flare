@@ -37,6 +37,10 @@ struct ModelManager {
 
   void newFrame();
 
+  ModelPrefab *getPrefab(Handle<ModelPrefab> handle) {
+    return modelPrefabs.get(handle);
+  }
+
   GpuDevice *gpu;
   bool loaded = false;
 

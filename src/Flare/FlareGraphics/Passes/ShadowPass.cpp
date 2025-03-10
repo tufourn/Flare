@@ -83,7 +83,7 @@ void ShadowPass::render(VkCommandBuffer cmd) {
 
   vkCmdBeginRendering(cmd, &renderingInfo);
 
-  if (enable) {
+  if (enable && maxDrawCount > 0) {
     vkCmdBindPipeline(cmd, pipeline->bindPoint, pipeline->pipeline);
     vkCmdBindIndexBuffer(cmd, gpu->getBuffer(indexBufferHandle)->buffer, 0,
                          VK_INDEX_TYPE_UINT32);

@@ -22,10 +22,6 @@ void ModelManager::init(GpuDevice *gpuDevice, uint32_t prefabCount,
 }
 
 void ModelManager::shutdown() {
-  if (!loaded) {
-    return;
-  }
-
   std::vector<Handle<ModelPrefab>> handles;
   handles.reserve(loadedPrefabs.size());
   for (auto &[path, handle] : loadedPrefabs) {
@@ -45,8 +41,6 @@ void ModelManager::shutdown() {
 }
 
 Handle<ModelPrefab> ModelManager::loadPrefab(std::filesystem::path path) {
-  loaded = true;
-
   if (loadedPrefabs.contains(path)) {
     spdlog::info("{} already loaded, reusing", path.string());
     return loadedPrefabs.at(path);
@@ -86,6 +80,7 @@ Handle<ModelPrefab> ModelManager::loadPrefab(std::filesystem::path path) {
 
   buildBuffers();
 
+  spdlog::info("loaded prefab {}", path.string());
   return handle;
 }
 
@@ -127,6 +122,8 @@ ModelManager::addInstance(Handle<ModelPrefab> prefabHandle,
   return handle;
 }
 void ModelManager::destroyModelBuffers() {
+  vkDeviceWaitIdle(gpu->device); // TODO: sync
+
   if (indexBufferHandle.isValid()) {
     gpu->destroyBuffer(indexBufferHandle);
   }
@@ -264,7 +261,7 @@ void ModelManager::newFrame() {
 
   if (!transforms.empty() &&
       (!transformRingBuffer.buffer().isValid() ||
-       transforms.size() * sizeof(glm::mat4) <
+       transforms.size() * sizeof(glm::mat4) >
            gpu->getBuffer(transformRingBuffer.buffer())->size)) {
     if (transformRingBuffer.buffer().isValid()) {
       gpu->destroyBuffer(transformRingBuffer.buffer());
@@ -281,9 +278,9 @@ void ModelManager::newFrame() {
         gpu->createBuffer(transformsCI);
   }
 
-  if (!indirectDrawDatas.empty() &
+  if (!indirectDrawDatas.empty() &&
       (!indirectDrawDataRingBuffer.buffer().isValid() ||
-       indirectDrawDatas.size() * sizeof(IndirectDrawData) <
+       indirectDrawDatas.size() * sizeof(IndirectDrawData) >
            gpu->getBuffer(indirectDrawDataRingBuffer.buffer())->size)) {
     if (indirectDrawDataRingBuffer.buffer().isValid()) {
       gpu->destroyBuffer(indirectDrawDataRingBuffer.buffer());
@@ -300,9 +297,10 @@ void ModelManager::newFrame() {
         .bufferRing[indirectDrawDataRingBuffer.ringIndex] =
         gpu->createBuffer(indirectDrawsCI);
   }
-  if (!bounds.empty() & (!boundsRingBuffer.buffer().isValid() ||
-                         bounds.size() * sizeof(Bounds) <
-                             gpu->getBuffer(boundsRingBuffer.buffer())->size)) {
+  if (!bounds.empty() &&
+      (!boundsRingBuffer.buffer().isValid() ||
+       bounds.size() * sizeof(Bounds) >
+           gpu->getBuffer(boundsRingBuffer.buffer())->size)) {
     if (boundsRingBuffer.buffer().isValid()) {
       gpu->destroyBuffer(boundsRingBuffer.buffer());
     }

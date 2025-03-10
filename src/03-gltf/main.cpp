@@ -13,6 +13,7 @@
 #include "FlareGraphics/Passes/LightingPass.h"
 #include "FlareGraphics/Passes/ShadowPass.h"
 #include "FlareGraphics/Passes/SkyboxPass.h"
+#include "ImGuiFileDialog.h"
 #include "imgui.h"
 
 using namespace Flare;
@@ -34,18 +35,6 @@ struct TriangleApp : Application {
 
     modelManager.init(&gpu, 100, 100);
     culledIndirectDrawRingBuffer.init(&gpu, FRAMES_IN_FLIGHT);
-
-    Handle<ModelPrefab> boxHandle =
-        modelManager.loadPrefab("assets/BoxTextured.gltf");
-    Handle<ModelInstance> boxInstance = modelManager.addInstance(
-        boxHandle, glm::translate(glm::mat4(1.f), glm::vec3(-2.f, 0.f, 0.f)));
-    Handle<ModelInstance> boxInstance2 =
-        modelManager.addInstance(boxHandle, glm::mat4(1.f));
-
-    Handle<ModelPrefab> carHandle =
-        modelManager.loadPrefab("assets/CesiumMilkTruck.gltf");
-    Handle<ModelInstance> carInstance = modelManager.addInstance(
-        carHandle, glm::translate(glm::mat4(1.f), glm::vec3(4.f, 2.f, 0.f)));
 
     BufferCI lightCI = {
         .size = sizeof(LightData),
@@ -83,6 +72,17 @@ struct TriangleApp : Application {
     while (!window.shouldClose()) {
       window.newFrame();
       modelManager.newFrame();
+
+      if (!queuedPrefabFiles.empty()) {
+        std::string path = queuedPrefabFiles.back();
+        queuedPrefabFiles.pop_back();
+
+        Handle<ModelPrefab> prefab = modelManager.loadPrefab(path);
+        if (std::find(loadedPrefabs.begin(), loadedPrefabs.end(), prefab) ==
+            loadedPrefabs.end()) {
+          loadedPrefabs.push_back(prefab);
+        }
+      }
 
       if (!window.isMinimized()) {
         if (window.shouldResize) {
@@ -125,10 +125,11 @@ struct TriangleApp : Application {
         shadowPass.setInputs(shadowPassInputs);
 
         // frustum cull
-        if (!culledIndirectDrawRingBuffer.buffer().isValid() ||
-            gpu.getBuffer(culledIndirectDrawRingBuffer.buffer())->size <
-                gpu.getBuffer(modelManager.indirectDrawDataRingBuffer.buffer())
-                    ->size) {
+        if (modelManager.indirectDrawDataRingBuffer.buffer().isValid() &&
+            (!culledIndirectDrawRingBuffer.buffer().isValid() ||
+             gpu.getBuffer(culledIndirectDrawRingBuffer.buffer())->size <
+                 gpu.getBuffer(modelManager.indirectDrawDataRingBuffer.buffer())
+                     ->size)) {
           if (culledIndirectDrawRingBuffer.buffer().isValid()) {
             gpu.destroyBuffer(culledIndirectDrawRingBuffer.buffer());
           }
@@ -154,6 +155,7 @@ struct TriangleApp : Application {
             .outputIndirectDrawBuffer = culledIndirectDrawRingBuffer.buffer(),
             .countBuffer = modelManager.countRingBuffer.buffer(),
             .boundsBuffer = modelManager.boundsRingBuffer.buffer(),
+            .maxDrawCount = modelManager.count,
         };
         if (shouldFrustumCull) {
           chosenIndirectDrawBufferHandle =
@@ -214,6 +216,7 @@ struct TriangleApp : Application {
         skyboxPass.setInputs(skyboxInputs);
 
         VkCommandBuffer cmd = gpu.getCommandBuffer();
+        gpu.transitionDrawTextureToColorAttachment(cmd);
 
         // todo: separate frustum cull for shadows
         // shadows
@@ -229,10 +232,10 @@ struct TriangleApp : Application {
         // gbuffer pass
         gBufferPass.render(cmd);
 
-        gpu.transitionDrawTextureToColorAttachment(cmd);
-
-        // lighting pass
-        lightingPass.render(cmd);
+        if (modelManager.count > 0) {
+          // lighting pass
+          lightingPass.render(cmd);
+        }
 
         // skybox pass
         if (shouldRenderSkybox) {
@@ -240,6 +243,49 @@ struct TriangleApp : Application {
         }
 
         ImGui::Begin("Options");
+
+        if (ImGui::Button("Load prefab")) {
+          IGFD::FileDialogConfig config;
+          config.path = ".";
+          ImGuiFileDialog::Instance()->OpenDialog(
+              "ChooseFileDlgKey", "Choose File", ".gltf,.glb", config);
+        }
+        if (ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")) {
+          if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
+            std::string filePathName =
+                ImGuiFileDialog::Instance()->GetFilePathName();
+            queuedPrefabFiles.push_back(filePathName);
+          }
+          ImGuiFileDialog::Instance()->Close();
+        }
+
+        std::vector<std::string> prefabNames(loadedPrefabs.size());
+        for (size_t i = 0; i < loadedPrefabs.size(); i++) {
+          prefabNames[i] =
+              modelManager.getPrefab(loadedPrefabs[i])->gltfModel.filename;
+        }
+        if (ImGui::BeginListBox("Prefabs")) {
+          for (size_t n = 0; n < prefabNames.size(); n++) {
+            const bool isSelected = (selectedPrefabIndex == n);
+            if (ImGui::Selectable(prefabNames[n].c_str(), isSelected)) {
+              selectedPrefabIndex = n;
+            }
+            if (isSelected) {
+              ImGui::SetItemDefaultFocus();
+            }
+          }
+          ImGui::EndListBox();
+        }
+
+        if (selectedPrefabIndex >= 0) {
+          ImGui::Text("Selected prefab %s",
+                      prefabNames[selectedPrefabIndex].c_str());
+          if (ImGui::Button("Add instance")) {
+            loadedInstances.push_back(modelManager.addInstance(
+                loadedPrefabs[selectedPrefabIndex], glm::mat4(1.f)));
+          }
+        }
+
         ImGui::Checkbox("Shadows", &shadowPass.enable);
         ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
         ImGui::Checkbox("Fixed frustum", &fixedFrustum);
@@ -316,6 +362,13 @@ struct TriangleApp : Application {
   RingBuffer cameraDataRingBuffer;
 
   ModelManager modelManager;
+
+  std::vector<std::string> queuedPrefabFiles;
+  std::vector<Handle<ModelPrefab>> loadedPrefabs;
+  int selectedPrefabIndex = -1;
+
+  std::vector<Handle<ModelInstance>> loadedInstances;
+  int selectedInstanceIndex = -1;
 
   RingBuffer culledIndirectDrawRingBuffer;
 

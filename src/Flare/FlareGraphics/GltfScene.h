@@ -108,6 +108,8 @@ struct GltfScene {
   GpuDevice *gpu = nullptr;
   cgltf_data *data = nullptr;
 
+  std::string filename;
+
   void init(const std::filesystem::path &path, GpuDevice *gpuDevice);
 
   void shutdown();

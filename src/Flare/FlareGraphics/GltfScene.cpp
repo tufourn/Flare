@@ -12,6 +12,7 @@
 namespace Flare {
 void GltfScene::init(const std::filesystem::path &path, GpuDevice *gpuDevice) {
   gpu = gpuDevice;
+  filename = path.filename().string();
 
   std::filesystem::path directory = path.parent_path();
 
