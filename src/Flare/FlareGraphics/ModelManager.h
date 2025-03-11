@@ -48,8 +48,9 @@ struct ModelManager {
     return modelInstances.get(handle);
   }
 
+  bool shouldDraw() const { return !indirectDrawDatas.empty(); }
+
   GpuDevice *gpu;
-  bool loaded = false;
 
   int selectedPrefabIndex = -1;
   std::vector<std::filesystem::path> queuedPrefabPaths;

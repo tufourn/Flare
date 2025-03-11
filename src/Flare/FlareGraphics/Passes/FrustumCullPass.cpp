@@ -125,10 +125,12 @@ FrustumPlanes FrustumCullPass::getFrustumPlanes(glm::mat4 mat, bool normalize) {
 }
 
 void FrustumCullPass::setInputs(const FrustumCullInputs &inputs) {
-  frustumUniformRingBuffer.moveToNextBuffer();
-  uniforms.frustumPlanes =
-      FrustumCullPass::getFrustumPlanes(inputs.viewProjection);
-  gpu->uploadBufferData(frustumUniformRingBuffer.buffer(), &uniforms);
+  if (!fixedFrustum) {
+    frustumUniformRingBuffer.moveToNextBuffer();
+    uniforms.frustumPlanes =
+        FrustumCullPass::getFrustumPlanes(inputs.viewProjection);
+    gpu->uploadBufferData(frustumUniformRingBuffer.buffer(), &uniforms);
+  }
 
   maxDrawCount = inputs.maxDrawCount;
   outputIndirectBufferHandle = inputs.outputIndirectDrawBuffer;

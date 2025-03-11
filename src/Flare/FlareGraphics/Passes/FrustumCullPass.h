@@ -44,6 +44,8 @@ struct FrustumCullPass {
 
   GpuDevice *gpu = nullptr;
 
+  bool fixedFrustum = false;
+
   PipelineCI pipelineCI;
   Handle<Pipeline> pipelineHandle;
 

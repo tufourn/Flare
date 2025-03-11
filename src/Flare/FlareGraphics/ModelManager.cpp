@@ -280,29 +280,19 @@ void ModelManager::newFrame() {
       (!transformRingBuffer.buffer().isValid() ||
        transforms.size() * sizeof(glm::mat4) >
            gpu->getBuffer(transformRingBuffer.buffer())->size)) {
-    if (transformRingBuffer.buffer().isValid()) {
-      gpu->destroyBuffer(transformRingBuffer.buffer());
-    }
-
     BufferCI transformsCI = {
         .size = transforms.size() * sizeof(glm::mat4),
         .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         .mapped = true,
         .name = "transforms",
     };
-
-    transformRingBuffer.bufferRing[transformRingBuffer.ringIndex] =
-        gpu->createBuffer(transformsCI);
+    transformRingBuffer.createBuffer(transformsCI);
   }
 
   if (!indirectDrawDatas.empty() &&
       (!indirectDrawDataRingBuffer.buffer().isValid() ||
        indirectDrawDatas.size() * sizeof(IndirectDrawData) >
            gpu->getBuffer(indirectDrawDataRingBuffer.buffer())->size)) {
-    if (indirectDrawDataRingBuffer.buffer().isValid()) {
-      gpu->destroyBuffer(indirectDrawDataRingBuffer.buffer());
-    }
-
     BufferCI indirectDrawsCI = {
         .size = sizeof(IndirectDrawData) * indirectDrawDatas.size(),
         .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
@@ -310,26 +300,20 @@ void ModelManager::newFrame() {
         .mapped = true,
         .name = "indirect draws",
     };
-    indirectDrawDataRingBuffer
-        .bufferRing[indirectDrawDataRingBuffer.ringIndex] =
-        gpu->createBuffer(indirectDrawsCI);
+    indirectDrawDataRingBuffer.createBuffer(indirectDrawsCI);
   }
+
   if (!bounds.empty() &&
       (!boundsRingBuffer.buffer().isValid() ||
        bounds.size() * sizeof(Bounds) >
            gpu->getBuffer(boundsRingBuffer.buffer())->size)) {
-    if (boundsRingBuffer.buffer().isValid()) {
-      gpu->destroyBuffer(boundsRingBuffer.buffer());
-    }
-
     BufferCI boundsCI = {
         .size = sizeof(Bounds) * bounds.size(),
         .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         .mapped = true,
         .name = "bounds",
     };
-    boundsRingBuffer.bufferRing[boundsRingBuffer.ringIndex] =
-        gpu->createBuffer(boundsCI);
+    boundsRingBuffer.createBuffer(boundsCI);
   }
 
   if (transformRingBuffer.buffer().isValid()) {
@@ -352,8 +336,8 @@ void ModelManager::newFrame() {
   }
 
   count = indirectDrawDatas.size();
-  // memcpy(gpu->getBuffer(countRingBuffer.buffer())->allocationInfo.pMappedData,
-  //        &count, sizeof(uint32_t));
+  memcpy(gpu->getBuffer(countRingBuffer.buffer())->allocationInfo.pMappedData,
+         &count, sizeof(uint32_t));
 }
 void ModelManager::drawImguiMenu() {
   ImGui::Begin("Model Manager");

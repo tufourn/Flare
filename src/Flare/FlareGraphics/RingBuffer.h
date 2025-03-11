@@ -14,6 +14,8 @@ struct RingBuffer {
 
   void moveToNextBuffer();
 
+  void createBuffer(BufferCI& ci);
+
   Handle<Buffer> buffer();
   Handle<Buffer> buffer(uint32_t index);
 

@@ -114,29 +114,23 @@ struct TriangleApp : Application {
         shadowPass.setInputs(shadowPassInputs);
 
         // frustum cull
-        if (modelManager.indirectDrawDataRingBuffer.buffer().isValid() &&
+        if (modelManager.shouldDraw() &&
             (!culledIndirectDrawRingBuffer.buffer().isValid() ||
              gpu.getBuffer(culledIndirectDrawRingBuffer.buffer())->size <
                  gpu.getBuffer(modelManager.indirectDrawDataRingBuffer.buffer())
                      ->size)) {
-          if (culledIndirectDrawRingBuffer.buffer().isValid()) {
-            gpu.destroyBuffer(culledIndirectDrawRingBuffer.buffer());
-          }
-
           BufferCI indirectDrawsCI = {
-              .size = sizeof(IndirectDrawData) *
-                      modelManager.indirectDrawDatas.size(),
+              .size = sizeof(IndirectDrawData) * modelManager.count,
               .usageFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT |
                             VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
               .name = "culled indirect draws",
           };
-          culledIndirectDrawRingBuffer
-              .bufferRing[culledIndirectDrawRingBuffer.ringIndex] =
-              gpu.createBuffer(indirectDrawsCI);
+          culledIndirectDrawRingBuffer.createBuffer(indirectDrawsCI);
         }
 
         Handle<Buffer> chosenIndirectDrawBufferHandle =
             modelManager.indirectDrawDataRingBuffer.buffer();
+
         FrustumCullInputs frustumCullInputs = {
             .viewProjection = projection * view,
             .inputIndirectDrawBuffer =
@@ -149,9 +143,7 @@ struct TriangleApp : Application {
         if (shouldFrustumCull) {
           chosenIndirectDrawBufferHandle =
               culledIndirectDrawRingBuffer.buffer();
-          if (!fixedFrustum) {
-            frustumCullPass.setInputs(frustumCullInputs);
-          }
+          frustumCullPass.setInputs(frustumCullInputs);
         }
 
         // gbuffer
@@ -237,7 +229,7 @@ struct TriangleApp : Application {
 
         ImGui::Checkbox("Shadows", &shadowPass.enable);
         ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
-        ImGui::Checkbox("Fixed frustum", &fixedFrustum);
+        ImGui::Checkbox("Fixed frustum", &frustumCullPass.fixedFrustum);
         ImGui::Checkbox("Skybox", &shouldRenderSkybox);
         ImGui::SliderFloat3("Light position",
                             reinterpret_cast<float *>(&lightData.lightPos),
@@ -301,7 +293,6 @@ struct TriangleApp : Application {
 
   bool shouldReloadPipeline = false;
   bool shouldFrustumCull = true;
-  bool fixedFrustum = false;
   bool shouldRenderSkybox = true;
 
   LightData lightData;

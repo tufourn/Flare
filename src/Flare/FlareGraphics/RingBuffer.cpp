@@ -33,6 +33,13 @@ void RingBuffer::moveToNextBuffer() {
   }
 }
 
+void RingBuffer::createBuffer(BufferCI &ci) {
+  if (bufferRing[ringIndex].isValid()) {
+    gpuDevice->destroyBuffer(bufferRing[ringIndex]);
+  }
+  bufferRing[ringIndex] = gpuDevice->createBuffer(ci);
+}
+
 Handle<Buffer> RingBuffer::buffer() { return bufferRing[ringIndex]; }
 
 Handle<Buffer> RingBuffer::buffer(uint32_t index) { return bufferRing[index]; }
