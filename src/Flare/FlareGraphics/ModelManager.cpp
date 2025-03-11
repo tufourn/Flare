@@ -1,5 +1,8 @@
 #include "ModelManager.h"
 #include "GpuDevice.h"
+#include "ImGuiFileDialog.h"
+
+#include <imgui.h>
 
 namespace Flare {
 
@@ -210,6 +213,13 @@ void ModelManager::buildBuffers() {
 }
 
 void ModelManager::newFrame() {
+  if (!queuedPrefabPaths.empty()) {
+    std::filesystem::path path = queuedPrefabPaths.back();
+    queuedPrefabPaths.pop_back();
+
+    loadPrefab(path);
+  }
+
   indirectDrawDataRingBuffer.moveToNextBuffer();
   indirectDrawDatas.clear();
 
@@ -242,23 +252,17 @@ void ModelManager::newFrame() {
 
       indirectDrawDatas.push_back(indirectDrawData);
 
-      glm::mat4 transform = glm::mat4(1.0f); // Identity matrix
-
-      transform = glm::scale(transform, instance->scale);
-
-      transform =
-          glm::rotate(transform, glm::radians(instance->rotation.x),
-                      glm::vec3(1.f, 0.f, 0.f)); // Rotation around x-axis
-      transform =
-          glm::rotate(transform, glm::radians(instance->rotation.y),
-                      glm::vec3(0.f, 1.f, 0.f)); // Rotation around y-axis
-      transform =
-          glm::rotate(transform, glm::radians(instance->rotation.z),
-                      glm::vec3(0.f, 0.f, 1.f)); // Rotation around z-axis
-
+      glm::mat4 transform = glm::mat4(1.0f);
       transform = glm::translate(transform, instance->translation);
-
-      transform = transform * prefab->gltfModel.transforms[meshDraw.transformOffset];
+      transform = glm::rotate(transform, glm::radians(instance->rotation.x),
+                              glm::vec3(1.f, 0.f, 0.f));
+      transform = glm::rotate(transform, glm::radians(instance->rotation.y),
+                              glm::vec3(0.f, 1.f, 0.f));
+      transform = glm::rotate(transform, glm::radians(instance->rotation.z),
+                              glm::vec3(0.f, 0.f, 1.f));
+      transform = glm::scale(transform, instance->scale);
+      transform =
+          transform * prefab->gltfModel.transforms[meshDraw.transformOffset];
 
       transforms.push_back(transform);
 
@@ -348,5 +352,86 @@ void ModelManager::newFrame() {
   }
 
   count = indirectDrawDatas.size();
+  // memcpy(gpu->getBuffer(countRingBuffer.buffer())->allocationInfo.pMappedData,
+  //        &count, sizeof(uint32_t));
+}
+void ModelManager::drawImguiMenu() {
+  ImGui::Begin("Model Manager");
+
+  if (ImGui::Button("Load gltf prefab")) {
+    IGFD::FileDialogConfig config;
+    config.path = ".";
+    ImGuiFileDialog::Instance()->OpenDialog("ChooseFileDlgKey", "Choose File",
+                                            ".gltf,.glb", config);
+  }
+
+  if (ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")) {
+    if (ImGuiFileDialog::Instance()->IsOk()) {
+      std::string filePathName = ImGuiFileDialog::Instance()->GetFilePathName();
+      queuedPrefabPaths.push_back(filePathName);
+    }
+    ImGuiFileDialog::Instance()->Close();
+  }
+
+  std::vector<std::string> prefabNames;
+  std::vector<Handle<ModelPrefab>> prefabHandles;
+
+  prefabNames.reserve(loadedPrefabs.size());
+  prefabHandles.reserve(loadedPrefabs.size());
+  for (const auto &[path, prefabHandle] : loadedPrefabs) {
+    prefabHandles.push_back(prefabHandle);
+    prefabNames.push_back(getPrefab(prefabHandle)->gltfModel.filename);
+  }
+
+  if (ImGui::BeginListBox("Prefabs")) {
+    for (size_t n = 0; n < prefabNames.size(); n++) {
+      const bool isSelected = (selectedPrefabIndex == n);
+      if (ImGui::Selectable(prefabNames[n].c_str(), isSelected)) {
+        selectedPrefabIndex = n;
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndListBox();
+  }
+
+  if (selectedPrefabIndex >= 0) {
+    ImGui::Text("Selected prefab %s", prefabNames[selectedPrefabIndex].c_str());
+    if (ImGui::Button("Add instance")) {
+      addInstance(prefabHandles[selectedPrefabIndex]);
+    }
+  }
+
+  std::vector<std::string> instanceNames(loadedInstances.size());
+  for (size_t i = 0; i < loadedInstances.size(); i++) {
+    instanceNames[i] = "Instance " + std::to_string(i);
+  }
+  if (ImGui::BeginListBox("Instances")) {
+    for (size_t n = 0; n < instanceNames.size(); n++) {
+      const bool isSelected = (selectedInstanceIndex == n);
+      if (ImGui::Selectable(instanceNames[n].c_str(), isSelected)) {
+        selectedInstanceIndex = n;
+      }
+      if (isSelected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndListBox();
+  }
+  if (selectedInstanceIndex >= 0) {
+    ModelInstance *instance =
+        getInstance(loadedInstances[selectedInstanceIndex]);
+    ImGui::Text("Selected instance %d", selectedInstanceIndex);
+    ImGui::SliderFloat3("Translation",
+                        reinterpret_cast<float *>(&instance->translation),
+                        -10.f, 10.f);
+    ImGui::SliderFloat3(
+        "Rotation", reinterpret_cast<float *>(&instance->rotation), 0.f, 360.f);
+    ImGui::SliderFloat3("Scale", reinterpret_cast<float *>(&instance->scale),
+                        0.f, 5.f);
+  }
+
+  ImGui::End();
 }
 } // namespace Flare

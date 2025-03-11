@@ -26,7 +26,7 @@ struct ModelManager {
   void init(GpuDevice *gpuDevice, uint32_t prefabCount, uint32_t instanceCount);
   void shutdown();
 
-  [[nodiscard]] Handle<ModelPrefab> loadPrefab(std::filesystem::path path);
+  Handle<ModelPrefab> loadPrefab(std::filesystem::path path);
 
   void removePrefab(Handle<ModelPrefab> handle);
 
@@ -37,6 +37,8 @@ struct ModelManager {
   void buildBuffers();
 
   void newFrame();
+
+  void drawImguiMenu();
 
   ModelPrefab *getPrefab(Handle<ModelPrefab> handle) {
     return modelPrefabs.get(handle);
@@ -49,9 +51,12 @@ struct ModelManager {
   GpuDevice *gpu;
   bool loaded = false;
 
+  int selectedPrefabIndex = -1;
+  std::vector<std::filesystem::path> queuedPrefabPaths;
   std::unordered_map<std::filesystem::path, Handle<ModelPrefab>> loadedPrefabs;
   ResourcePool<ModelPrefab> modelPrefabs;
 
+  int selectedInstanceIndex = -1;
   std::vector<Handle<ModelInstance>> loadedInstances;
   ResourcePool<ModelInstance> modelInstances;
 

@@ -73,17 +73,6 @@ struct TriangleApp : Application {
       window.newFrame();
       modelManager.newFrame();
 
-      if (!queuedPrefabFiles.empty()) {
-        std::string path = queuedPrefabFiles.back();
-        queuedPrefabFiles.pop_back();
-
-        Handle<ModelPrefab> prefab = modelManager.loadPrefab(path);
-        if (std::find(loadedPrefabs.begin(), loadedPrefabs.end(), prefab) ==
-            loadedPrefabs.end()) {
-          loadedPrefabs.push_back(prefab);
-        }
-      }
-
       if (!window.isMinimized()) {
         if (window.shouldResize) {
           window.shouldResize = false;
@@ -242,80 +231,9 @@ struct TriangleApp : Application {
           skyboxPass.render(cmd);
         }
 
+        modelManager.drawImguiMenu();
+
         ImGui::Begin("Options");
-
-        if (ImGui::Button("Load prefab")) {
-          IGFD::FileDialogConfig config;
-          config.path = ".";
-          ImGuiFileDialog::Instance()->OpenDialog(
-              "ChooseFileDlgKey", "Choose File", ".gltf,.glb", config);
-        }
-        if (ImGuiFileDialog::Instance()->Display("ChooseFileDlgKey")) {
-          if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
-            std::string filePathName =
-                ImGuiFileDialog::Instance()->GetFilePathName();
-            queuedPrefabFiles.push_back(filePathName);
-          }
-          ImGuiFileDialog::Instance()->Close();
-        }
-
-        std::vector<std::string> prefabNames(loadedPrefabs.size());
-        for (size_t i = 0; i < loadedPrefabs.size(); i++) {
-          prefabNames[i] =
-              modelManager.getPrefab(loadedPrefabs[i])->gltfModel.filename;
-        }
-        if (ImGui::BeginListBox("Prefabs")) {
-          for (size_t n = 0; n < prefabNames.size(); n++) {
-            const bool isSelected = (selectedPrefabIndex == n);
-            if (ImGui::Selectable(prefabNames[n].c_str(), isSelected)) {
-              selectedPrefabIndex = n;
-            }
-            if (isSelected) {
-              ImGui::SetItemDefaultFocus();
-            }
-          }
-          ImGui::EndListBox();
-        }
-
-        if (selectedPrefabIndex >= 0) {
-          ImGui::Text("Selected prefab %s",
-                      prefabNames[selectedPrefabIndex].c_str());
-          if (ImGui::Button("Add instance")) {
-            loadedInstances.push_back(
-                modelManager.addInstance(loadedPrefabs[selectedPrefabIndex]));
-          }
-        }
-
-        std::vector<std::string> instanceNames(loadedInstances.size());
-        for (size_t i = 0; i < loadedInstances.size(); i++) {
-          instanceNames[i] = "Instance " + std::to_string(i);
-        }
-        if (ImGui::BeginListBox("Instances")) {
-          for (size_t n = 0; n < instanceNames.size(); n++) {
-            const bool isSelected = (selectedInstanceIndex == n);
-            if (ImGui::Selectable(instanceNames[n].c_str(), isSelected)) {
-              selectedInstanceIndex = n;
-            }
-            if (isSelected) {
-              ImGui::SetItemDefaultFocus();
-            }
-          }
-          ImGui::EndListBox();
-        }
-        if (selectedInstanceIndex >= 0) {
-          ModelInstance *instance =
-              modelManager.getInstance(loadedInstances[selectedInstanceIndex]);
-          ImGui::Text("Selected instance %d", selectedInstanceIndex);
-          ImGui::SliderFloat3("Translation",
-                              reinterpret_cast<float *>(&instance->translation),
-                              -10.f, 10.f);
-          ImGui::SliderFloat3("Rotation",
-                              reinterpret_cast<float *>(&instance->rotation),
-                              0.f, 360.f);
-          ImGui::SliderFloat3("Scale",
-                              reinterpret_cast<float *>(&instance->scale),
-                              0.f, 5.f);
-        }
 
         ImGui::Checkbox("Shadows", &shadowPass.enable);
         ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
@@ -393,13 +311,6 @@ struct TriangleApp : Application {
   RingBuffer cameraDataRingBuffer;
 
   ModelManager modelManager;
-
-  std::vector<std::string> queuedPrefabFiles;
-  std::vector<Handle<ModelPrefab>> loadedPrefabs;
-  int selectedPrefabIndex = -1;
-
-  std::vector<Handle<ModelInstance>> loadedInstances;
-  int selectedInstanceIndex = -1;
 
   RingBuffer culledIndirectDrawRingBuffer;
 
