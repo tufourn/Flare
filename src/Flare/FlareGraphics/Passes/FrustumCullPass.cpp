@@ -128,7 +128,7 @@ void FrustumCullPass::setInputs(const FrustumCullInputs &inputs) {
   if (!fixedFrustum) {
     viewProjection = inputs.viewProjection;
     frustumUniformRingBuffer.moveToNextBuffer();
-    uniforms.frustumPlanes = FrustumCullPass::getFrustumPlanes(viewProjection);
+    uniforms.frustumPlanes = getFrustumPlanes(viewProjection);
     gpu->uploadBufferData(frustumUniformRingBuffer.buffer(), &uniforms);
   }
 
@@ -136,6 +136,7 @@ void FrustumCullPass::setInputs(const FrustumCullInputs &inputs) {
   outputIndirectBufferHandle = inputs.outputIndirectDrawBuffer;
   outputCountBufferHandle = inputs.countBuffer;
 
+  pc.mat = viewProjection;
   pc.data0 = inputs.inputIndirectDrawBuffer.index;
   pc.data1 = inputs.outputIndirectDrawBuffer.index;
   pc.data2 = inputs.countBuffer.index;

@@ -16,13 +16,45 @@ layout(set = 1, binding = 0) writeonly buffer OutputIndirectDrawDataBuffer {
     IndirectDrawData indirectDrawDatas[];
 } outputIndirectDrawDataAlias[];
 
-struct FrustumCullUniform {
-    vec4 frustumPlanes[6];
+//struct FrustumCullUniform {
+//    vec4 frustumPlanes[6];
+//};
+//layout (set = 0, binding = 0) uniform U { FrustumCullUniform frustumCullUniform; } frustumCullUniformAlias[];
+
+const vec3[] corners = {
+vec3(-1, -1, -1), // left bottom near
+vec3(-1, 1, -1), // left top near
+vec3(1, 1, -1), // right top near
+vec3(1, -1, -1), // right bottom near
+vec3(-1, -1, 1), // left bottom far
+vec3(-1, 1, 1), // left top far
+vec3(1, 1, 1), // right top far
+vec3(1, -1, 1), // right bottom far
 };
-layout (set = 0, binding = 0) uniform U { FrustumCullUniform frustumCullUniform; } frustumCullUniformAlias[];
+
+bool isVisible(mat4 mvp, Bounds bounds) {
+    vec3 minPos = vec3(1.1, 1.1, 1.1);
+    vec3 maxPos = vec3(-1.1, -1.1, -0.1);
+
+    for (uint i = 0; i < 8; i++) {
+        vec4 v = mvp * vec4(bounds.origin + corners[i] * bounds.extents, 1.0);
+        v.x /= v.w;
+        v.y /= v.w;
+        v.z /= v.w;
+
+        minPos = min(vec3(v.x, v.y, v.z), minPos);
+        maxPos = max(vec3(v.x, v.y, v.z), maxPos);
+    }
+
+    if (minPos.z > 1.0 || maxPos.z < 0.0 || minPos.x > 1.0 || maxPos.x < -1.0 || minPos.y > 1.0 || maxPos.y < -1.0) {
+        return false;
+    }
+    return true;
+}
 
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main() {
+    mat4 viewProjection = pc.mat;
     const uint inputIndirectDrawDataBufferIndex = pc.data0;
     const uint outputIndirectDrawDataBufferIndex = pc.data1;
     const uint countBufferIndex = pc.data2;
@@ -31,7 +63,7 @@ void main() {
     const uint transformBufferIndex = pc.data5;
 
     uint currentThreadId = gl_GlobalInvocationID.x;
-    FrustumCullUniform frustumCullUniform = frustumCullUniformAlias[pc.uniformOffset].frustumCullUniform;
+//    FrustumCullUniform frustumCullUniform = frustumCullUniformAlias[pc.uniformOffset].frustumCullUniform;
 
     if (currentThreadId >= drawCount) {
         return;
@@ -49,18 +81,8 @@ void main() {
 
     mat4 transform = transformAlias[transformBufferIndex].transforms[inDrawData.transformOffset];
 
-    vec4 origin = transform * vec4(bounds.origin, 1.0);
-
-    float maxScale = max(max(transform[0][0], transform[1][1]), transform[2][2]);
-    float radius = bounds.radius * maxScale;
-
-    bool isVisible = true;
-    for (int i = 0; i < 6; i++) {
-        vec4 plane = frustumCullUniform.frustumPlanes[i];
-        if (dot(origin, plane) + radius < 0.0) {
-            isVisible = false;
-        }
-    }
+    mat4 mvp = viewProjection * transform;
+    bool isVisible = isVisible(mvp, bounds);
 
     if (isVisible) {
         uint index = atomicAdd(countAlias[countBufferIndex].count, 1);
