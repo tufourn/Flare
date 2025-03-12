@@ -15,5 +15,5 @@ target_link_libraries(flare-gltf PRIVATE
 )
 
 target_copy_slang_binaries(flare-gltf)
-#copy_assets(flare-gltf assets ../Flare/FlareGraphics/CoreShaders)
+copy_assets(flare-gltf ../Flare/FlareGraphics/CoreShaders)
 #sync_shaders(flare-gltf)

@@ -96,6 +96,7 @@ struct PipelineCI {
   DepthStencilCI depthStencil;
   ColorBlendCI colorBlend;
   RenderingCI rendering;
+  VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 };
 
 struct Pipeline {
@@ -212,9 +213,7 @@ template <typename T> struct Handle {
 
   void invalidate() { index = invalidIndex; }
 
-  bool operator==(const Handle<T> &other) const {
-    return other.index == index;
-  }
+  bool operator==(const Handle<T> &other) const { return other.index == index; }
 };
 
 template <> struct Handle<Buffer> {

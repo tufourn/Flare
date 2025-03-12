@@ -265,14 +265,7 @@ void ModelManager::newFrame() {
           transform * prefab->gltfModel.transforms[meshDraw.transformOffset];
 
       transforms.push_back(transform);
-
-      Bounds newBounds = meshDraw.bounds;
-      newBounds.origin = transform * glm::vec4(newBounds.origin, 1.f);
-      newBounds.radius *=
-          std::max(std::max(transform[0][0], transform[1][1]), transform[2][2]);
-      newBounds.extents *=
-          std::max(std::max(transform[0][0], transform[1][1]), transform[2][2]);
-      bounds.push_back(newBounds);
+      bounds.push_back(meshDraw.bounds);
     }
   }
 

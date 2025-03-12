@@ -13,6 +13,7 @@
 #include "FlareGraphics/Passes/LightingPass.h"
 #include "FlareGraphics/Passes/ShadowPass.h"
 #include "FlareGraphics/Passes/SkyboxPass.h"
+#include "FlareGraphics/Passes/DrawBoundsPass.h"
 #include "ImGuiFileDialog.h"
 #include "imgui.h"
 
@@ -59,6 +60,7 @@ struct TriangleApp : Application {
     //        skyboxPass.loadImage("assets/free_hdri_sky_816.jpg");
     gBufferPass.init(&gpu);
     lightingPass.init(&gpu);
+    drawBoundsPass.init(&gpu);
 
     glfwSetWindowUserPointer(window.glfwWindow, &camera);
     glfwSetCursorPosCallback(window.glfwWindow, Camera::mouseCallback);
@@ -138,6 +140,7 @@ struct TriangleApp : Application {
             .outputIndirectDrawBuffer = culledIndirectDrawRingBuffer.buffer(),
             .countBuffer = modelManager.countRingBuffer.buffer(),
             .boundsBuffer = modelManager.boundsRingBuffer.buffer(),
+            .transformBuffer = modelManager.transformRingBuffer.buffer(),
             .maxDrawCount = modelManager.count,
         };
         if (shouldFrustumCull) {
@@ -196,6 +199,14 @@ struct TriangleApp : Application {
         };
         skyboxPass.setInputs(skyboxInputs);
 
+        DrawBoundsInputs drawBoundsInputs = {
+          .viewProjection = projection * view,
+          .boundsBuffer = modelManager.boundsRingBuffer.buffer(),
+          .transformBuffer = modelManager.transformRingBuffer.buffer(),
+          .count = modelManager.count,
+        };
+        drawBoundsPass.setInputs(drawBoundsInputs);
+
         VkCommandBuffer cmd = gpu.getCommandBuffer();
         gpu.transitionDrawTextureToColorAttachment(cmd);
 
@@ -223,6 +234,10 @@ struct TriangleApp : Application {
           skyboxPass.render(cmd);
         }
 
+        if (shouldDrawBounds) {
+          drawBoundsPass.render(cmd);
+        }
+
         modelManager.drawImguiMenu();
 
         ImGui::Begin("Options");
@@ -231,6 +246,7 @@ struct TriangleApp : Application {
         ImGui::Checkbox("Frustum cull", &shouldFrustumCull);
         ImGui::Checkbox("Fixed frustum", &frustumCullPass.fixedFrustum);
         ImGui::Checkbox("Skybox", &shouldRenderSkybox);
+        ImGui::Checkbox("Bounds", &shouldDrawBounds);
         ImGui::SliderFloat3("Light position",
                             reinterpret_cast<float *>(&lightData.lightPos),
                             -50.f, 50.f);
@@ -278,6 +294,7 @@ struct TriangleApp : Application {
     skyboxPass.shutdown();
     gBufferPass.shutdown();
     lightingPass.shutdown();
+    drawBoundsPass.shutdown();
 
     imgui.shutdown();
 
@@ -294,6 +311,7 @@ struct TriangleApp : Application {
   bool shouldReloadPipeline = false;
   bool shouldFrustumCull = true;
   bool shouldRenderSkybox = true;
+  bool shouldDrawBounds = false;
 
   LightData lightData;
   RingBuffer lightDataRingBuffer;
@@ -314,6 +332,7 @@ struct TriangleApp : Application {
   SkyboxPass skyboxPass;
   GBufferPass gBufferPass;
   LightingPass lightingPass;
+  DrawBoundsPass drawBoundsPass;
 };
 
 int main() {

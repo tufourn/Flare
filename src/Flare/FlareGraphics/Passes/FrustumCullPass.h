@@ -3,6 +3,8 @@
 #include "../GpuResources.h"
 #include "../RingBuffer.h"
 
+#include <array>
+
 namespace Flare {
 struct GpuDevice;
 
@@ -25,6 +27,7 @@ struct FrustumCullInputs {
   Handle<Buffer> outputIndirectDrawBuffer;
   Handle<Buffer> countBuffer;
   Handle<Buffer> boundsBuffer;
+  Handle<Buffer> transformBuffer;
   uint32_t maxDrawCount;
 };
 
@@ -45,6 +48,7 @@ struct FrustumCullPass {
   GpuDevice *gpu = nullptr;
 
   bool fixedFrustum = false;
+  glm::mat4 viewProjection;
 
   PipelineCI pipelineCI;
   Handle<Pipeline> pipelineHandle;
@@ -54,8 +58,9 @@ struct FrustumCullPass {
   PushConstants pc;
 
   uint32_t maxDrawCount = 0;
-  Handle<Buffer>
-      outputIndirectBufferHandle; // store these 2 handles to add barrier
+
+  // store these 2 handles to add barrier
+  Handle<Buffer> outputIndirectBufferHandle;
   Handle<Buffer> outputCountBufferHandle;
 };
 } // namespace Flare

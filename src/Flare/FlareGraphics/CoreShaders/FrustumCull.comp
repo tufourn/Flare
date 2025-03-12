@@ -28,6 +28,7 @@ void main() {
     const uint countBufferIndex = pc.data2;
     const uint boundsBufferIndex = pc.data3;
     const uint drawCount = pc.data4;
+    const uint transformBufferIndex = pc.data5;
 
     uint currentThreadId = gl_GlobalInvocationID.x;
     FrustumCullUniform frustumCullUniform = frustumCullUniformAlias[pc.uniformOffset].frustumCullUniform;
@@ -46,8 +47,12 @@ void main() {
 
     Bounds bounds = boundsAlias[boundsBufferIndex].bounds[currentThreadId];
 
-    vec4 origin = vec4(bounds.origin, 1.0);
-    float radius = bounds.radius;
+    mat4 transform = transformAlias[transformBufferIndex].transforms[inDrawData.transformOffset];
+
+    vec4 origin = transform * vec4(bounds.origin, 1.0);
+
+    float maxScale = max(max(transform[0][0], transform[1][1]), transform[2][2]);
+    float radius = bounds.radius * maxScale;
 
     bool isVisible = true;
     for (int i = 0; i < 6; i++) {
