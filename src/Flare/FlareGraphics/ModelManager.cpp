@@ -399,6 +399,7 @@ void ModelManager::drawImguiMenu() {
   if (selectedInstanceIndex >= 0) {
     ModelInstance *instance =
         getInstance(loadedInstances[selectedInstanceIndex]);
+
     ImGui::Text("Selected instance %d", selectedInstanceIndex);
     ImGui::SliderFloat3("Translation",
                         reinterpret_cast<float *>(&instance->translation),
@@ -407,6 +408,10 @@ void ModelManager::drawImguiMenu() {
         "Rotation", reinterpret_cast<float *>(&instance->rotation), 0.f, 360.f);
     ImGui::SliderFloat3("Scale", reinterpret_cast<float *>(&instance->scale),
                         0.f, 5.f);
+    if (ImGui::Button("Remove instance")) {
+      loadedInstances.erase(loadedInstances.begin() + selectedInstanceIndex);
+      selectedInstanceIndex = -1;
+    }
   }
 
   ImGui::End();

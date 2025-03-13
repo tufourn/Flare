@@ -14,7 +14,6 @@
 #include "FlareGraphics/Passes/ShadowPass.h"
 #include "FlareGraphics/Passes/SkyboxPass.h"
 #include "FlareGraphics/Passes/DrawBoundsPass.h"
-#include "ImGuiFileDialog.h"
 #include "imgui.h"
 
 using namespace Flare;
