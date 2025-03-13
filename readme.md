@@ -4,7 +4,7 @@
 A GPU-Driven renderer. It's a playground for me to experiment with and implement modern graphics programming techniques.
 
 ### Screenshots
-![sponza](screenshots/sponza.png)
+![screenshot](screenshots/screenshot.png)
 
 ## Features
 - [x] Fully bindless resources
