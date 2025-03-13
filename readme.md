@@ -10,7 +10,8 @@ A GPU-Driven renderer. It's a playground for me to experiment with and implement
 - [x] Fully bindless resources
 - [x] glTF scene loading
 - [x] Shader hot-reloading
-- [x] Compute culling
+- [x] Compute frustum culling
+- [x] Shadow mapping
 - [x] Deferred shading pipeline
 
 ## Todos
@@ -24,10 +25,16 @@ A GPU-Driven renderer. It's a playground for me to experiment with and implement
 ```
 git clone https://github.com/tufourn/Flare.git
 ```
+
+### Dependencies
+- Vulkan SDK
+
 ### Building
 The project is built using CMake. Use the provided CMakeLists.txt to generate a build configuration.
 
-The code was tested on my Zephyrus G14 (2021) running the Nvidia 3060 mobile GPU.
+The code was tested on the following GPUs on Windows:
+- Nvidia 3060 mobile
+- AMD RX 580
 
 ## References
 [Vulkan Tutorial](https://vulkan-tutorial.com/)
